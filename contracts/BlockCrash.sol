@@ -7,12 +7,14 @@ import { SafeERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.s
 /// @title BlockCrash
 /// @author @builtbyfrancis
 contract BlockCrash {
+    address public immutable RUNNER;
     IERC20 public immutable GRIND;
 
     // #######################################################################################
 
     error ZeroAmountError();
     error InvalidActionError();
+    error InvalidSenderError();
 
     // #######################################################################################
 
@@ -47,10 +49,16 @@ contract BlockCrash {
         _;
     }
 
+    modifier OnlyRunner() {
+        if (msg.sender != RUNNER) revert InvalidSenderError();
+        _;
+    }
+
     // #######################################################################################
 
-    constructor(IERC20 grind_) {
+    constructor(IERC20 grind_, address runner_) {
         GRIND = grind_;
+        RUNNER = runner_;
     }
 
     // #######################################################################################
@@ -76,16 +84,16 @@ contract BlockCrash {
         emit LiquidityChangeQueued(_action, msg.sender, _amount);
     }
 
-    function reset() external {
+    function reset() external OnlyRunner {
         _processLiquidityQueue();
     }
 
     // #######################################################################################
 
     function _processLiquidityQueue() private {
-        for (uint256 i = 0; i < _liquidityQueue.length; i++) {
-            uint256 _balance = GRIND.balanceOf(address(this));
+        uint256 _balance = GRIND.balanceOf(address(this));
 
+        for (uint256 i = 0; i < _liquidityQueue.length; i++) {
             LiquidityDelta memory delta = _liquidityQueue[i];
 
             if (delta.action == 0) {
@@ -94,6 +102,7 @@ contract BlockCrash {
                 _balance -= _removeLiquidity(delta.user, delta.amount, _balance);
             }
         }
+
         delete _liquidityQueue;
     }
 
@@ -122,12 +131,12 @@ contract BlockCrash {
             return 0;
         }
 
+        uint256 withdrawAmount = (_amount * _balance) / _totalShares;
+
         unchecked {
             user.shares -= _amount;
             _totalShares -= _amount;
         }
-
-        uint256 withdrawAmount = (_amount * _balance) / _totalShares;
 
         SafeERC20.safeTransfer(GRIND, _user, withdrawAmount);
 
@@ -136,4 +145,3 @@ contract BlockCrash {
         return withdrawAmount;
     }
 }
-

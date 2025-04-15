@@ -14,13 +14,9 @@ const config: HardhatUserConfig = {
       codegen: "yul",
     },
   },
-  defaultNetwork: "abstractTestnet",
+  defaultNetwork: "hardhat",
   networks: {
-    inMemoryNode: {
-      url: "http://127.0.0.1:8011",
-      ethNetwork: "localhost", // in-memory node doesn't support eth node; removing this line will cause an error
-      zksync: true,
-    },
+    hardhat: {},
     abstractTestnet: {
       url: "https://api.testnet.abs.xyz",
       ethNetwork: "sepolia",
