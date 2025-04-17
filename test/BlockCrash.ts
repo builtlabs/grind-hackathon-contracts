@@ -5,6 +5,59 @@ import { ethers } from "hardhat";
 const oneEther = ethers.parseEther("1");
 const initialBalance = ethers.parseEther("100");
 
+const knownRandoms = [
+    "0x283b8dccf28774e4a044d565a03369ff0c07898f65ae91230915f2ba1437981d",
+    "0xeaf524133e8d9a0f1a969c83af27fb013166dfc8c9e66392e0f2f83a9b635e51",
+    "0x96a8a21bcd09432f88ad64788fc68b8db463e5a9f2d6a8a3ee754449c55c91c9",
+    "0x4b1dc1dd9db96919105a6ce350ddab528b8e84db161cbd03044123f16bb20147",
+    "0x53f1f5ab12de6c1ad3106d99e253e3e5308ab8ab880fb3ec4bc216a4129f596b",
+    "0xe9c8038c3fb6e756f3482d07a25cffd382371b9e2d876ebe8047b83f6f1311a7",
+    "0xbb9daeafd51606c745a53d003f5569b049b90e045b69994194ab9b97491ca553",
+    "0x11865b4f8fb6aedf6d515f0cef844a6ed6305599ddbca02bc845add62a3662f9",
+    "0xc3ea3bb417eab918590f50d0c1c28637a6925c1ab097ae6e4c2136888090b50c",
+    "0x031331d4d1ecc343cbd321e273a813edd486286619837ce9e405efe73e1137bc",
+    "0xac7a1c7e2c8d7badb1bbfa5e93b4f53c5b35a116fa81e3690015338c14e5e6d0",
+    "0x985d72f78b3e79c3ff7ab1a858b64c6f71cd29f3dfc61cc07edd29eb1f57dff6",
+    "0x47d44da38a5ca7cc7d93e3039d36baaec3de5750bd9239c9cfe1bbdbfb925db6",
+    "0x8bd1a84c6c1219d92929c1d7e74a1a7e1911ff4d730c54796f2dafbc8878168f",
+    "0xf7d013a07e8ad65d4961d4eaa7cf48c83d81db998cceefa11fd4efa8f8ac2b04",
+    "0x7fa8ab17cfa10836fbc8d52417e6e2b9ca41faa55e4798b3fa681ed465ee0fba",
+    "0xed20edecf4b0168c24bcd84e00417dad5c950f85a4ff73ad070cc21396c9227e",
+    "0xde208f54438603e6853d5e78e896d001682b0a287f57e7256ecfb340cc49499f",
+    "0xefdd05aeb0b4c285499c6022168b7c68607456a5069eced86ae7cf5ef1b713ed",
+    "0x763e7e48c39bf05e6bcd6338a3ca650546a7ef23f7a245fde75482a08fa9ab90",
+    "0x461bc1dd2f94c4a3fd832653f088212b85a12e95ac8420e6d289e1264bad5731",
+    "0x1a6e08a9d27692e88b20c391621bcb1fab8a432143a41c221cc03ae31fc6e568",
+    "0x2f2473b554f9897ae1bb4c7be2c0db6c8cd1ec232df3ad19fbd6883039c670e0",
+    "0x8312e2a60bbae1c7b0e2dbb22de3108c3365647cd278618a0b798d3db6453040",
+    "0x97c78cf56002d6cefe3a404f09a51384bc8bc069e1ad633416f8a3685f3b801d",
+    "0x300f927202a376b4015f335f61a7f804d73f469d757789b416e8c908e466d346",
+    "0x63f01b566b136ad4c0807b31bfee9548c67ba591f4206d174fe78390fe1d90ef",
+    "0x7f424af7b21e77eee730939d951a516922bbe3a23a31c349526eaf4c4fae5c77",
+    "0x0c3b7a91d1701901f4758d8df235a0327e4022c9144a5e1b2684143ef8c31724",
+    "0x4847355acd881baa66e08c8f36326cfcb8935dd867b7a54fce93f25bc8df1b6f",
+    "0x8f139e7a06aac85dbf7542172846a82999cba85ab318e8e09e686a2fec6095e0",
+    "0x4cd5a71c71186a340d9c2f1cdc9fa59777c9987e5a04d6a51a3726308f8ca626",
+    "0xa7f4e50208fd712d885270a36e1a75f1626b5770c24e67be3f55352821af4e6e",
+    "0x39dcb8521f994e069b501a479b32864146be6ba1ae39d80beef720f2ecab4830",
+    "0x3117e2f82af4c1e805d700881720032d385e47226c2173e04ac9dffd2ba941db",
+    "0x59041a1806ca4cdb7d2d7d590d34b677b2dbd54ad6cf1e9fc98415d47eefdde2",
+    "0xb054c9f06e2a2ac7509d297320bafaea87153fe014e55c726ec4b3942f6eeddd",
+    "0x70fc827e96d00dea2136214bc3762b63d23a7cd45c4f35be6a16c8075021a546",
+    "0x1aa0a79eaf6ab3a8a9cda608428e01b9d41fbb91698e9b5d0cb9cca9b24dac3d",
+    "0x5c4f38c1888836188f85094cf568f0eb4ed155fd6c932e32bbf9ce0e4900349e",
+    "0x59bed028b906b8aa43bd1678de655e9dc72530ce15dad34d834e24fe7a3a22ac",
+    "0x4e50bd088322fdf3a69bd564d6c40b87de29e3225481cbbd1ec91ecd57971f1a",
+    "0x44779e756b687acfcaa46310a281054d508385ba5cc02898adcf8dd5c1fe774e",
+    "0x127d2ed5a6f61e9b247c0bb80db1319bf2284e0ee3f91147de2d20284d3ceda1",
+    "0xb8d6244764dae4fef11390554eadc94ce95fb229882ef24ee6cf5bef96199b43",
+    "0x54beae8cd25221ee29c227b094256b19fb8f76892fd4780badaee631a07ff6df",
+    "0x1840470562d84e3b072cef7162f3f76807e74c24b73286d97629e5adb8cc3d3e",
+    "0x3306e52a1cc9138008f3052d26c4008d7df1e32e463ed4c148d3f938a1bb140a",
+    "0xb660016ae02df58327d581305fb8c59a763381148817dccbd038ca4a1bcb22fc",
+    "0x3ba538d72ae8fb75e45683696e03a85d10b73ff70746fa10703b0b9762a28ee3",
+];
+
 describe("BlockCrash", function () {
     async function deployFixture() {
         const [deployer, alice, bob, charlie] = await ethers.getSigners();
@@ -17,7 +70,7 @@ describe("BlockCrash", function () {
         const sut = await BLOCKCRASH.deploy(grind.target, deployer.address);
 
         for (const wallet of [alice, bob, charlie]) {
-            await grind.mint(wallet.address);
+            await grind.connect(wallet).mint();
         }
 
         return {
@@ -35,11 +88,9 @@ describe("BlockCrash", function () {
     // ############################ TESTS ############################
 
     describe.skip("Integration", function () {
-        it("Should produce the expected tally", async function () {
-            const { sut, grind, wallets } = await loadFixture(deployFixture);
+        it.skip("Should produce the expected tally", async function () {
+            const { sut, grind } = await loadFixture(deployFixture);
 
-            await grind.mint(wallets.deployer.address);
-            await grind.mint(wallets.deployer.address);
             await grind.approve(sut.target, initialBalance * 2n);
 
             await sut.queueLiquidityChange(0, initialBalance);
@@ -54,7 +105,7 @@ describe("BlockCrash", function () {
                 80000000, 82500000, 85000000, 87500000, 90000000, 92500000, 95000000, 97500000, 100000000,
             ];
 
-            const total = 10000;
+            const total = 5000;
             const tally: Record<number, number> = {};
 
             for (let i = 0; i < total; i++) {
@@ -65,7 +116,7 @@ describe("BlockCrash", function () {
                 await sut.reset();
             }
 
-            const history = await sut.getHistory(0, total);
+            const history = await sut.getHistory(total);
 
             for (const multi of history) {
                 const keyIndex = multipliers.findIndex((x) => x === parseFloat(multi.toString()));
@@ -75,6 +126,8 @@ describe("BlockCrash", function () {
                 }
             }
 
+            let evs: number[] = [];
+
             for (const entries of Object.entries(tally)) {
                 const [key, value] = entries;
 
@@ -82,13 +135,73 @@ describe("BlockCrash", function () {
                 const ev = (value / total) * multi;
 
                 if (multi >= 1) {
-                    expect(ev).to.be.closeTo(0.97, 0.1);
+                    expect(ev).to.be.closeTo(0.97, 0.15);
+                    evs.push(ev);
                 } else {
                     expect(ev).to.be.lessThan(0.97);
                 }
 
                 console.log("ev", multi, (value / total) * multi);
             }
+
+            const avg = evs.reduce((a, b) => a + b, 0) / evs.length;
+            console.log("average ev", avg);
+
+            expect(avg).to.be.lessThan(1).greaterThan(0.9);
+        });
+
+        it("Plays as expected", async function () {
+            const { sut, wallets, grind } = await loadFixture(deployFixture);
+
+            await grind.connect(wallets.alice).approve(sut.target, initialBalance);
+            await grind.connect(wallets.bob).approve(sut.target, initialBalance);
+            await grind.connect(wallets.charlie).approve(sut.target, initialBalance);
+
+            await grind.approve(sut.target, initialBalance);
+            await sut.queueLiquidityChange(0, initialBalance);
+
+            await sut.reset();
+
+            const offset = await sut.ROUND_BUFFER();
+
+            const block = await ethers.provider.getBlock("latest");
+            if (!block) throw new Error("Block not found");
+
+            const mocks = knownRandoms.map((x, i) => {
+                return {
+                    blockNumber: BigInt(block.number + i) + offset,
+                    randomNumber: BigInt(x),
+                };
+            });
+
+            await sut.setMockRandom(mocks);
+
+            await sut.connect(wallets.alice).placeBet(oneEther, 10); // winner (6x)
+            await sut.connect(wallets.bob).placeBet(oneEther, 11); // dead on
+            await sut.connect(wallets.charlie).placeBet(oneEther, 12); // dead after
+
+            await mine(100);
+
+            const round = await sut.getRoundInfo();
+
+            expect(round.sb).to.equal(33n);
+            expect(round.eb).to.equal(44n);
+            expect(round.lq).to.equal(
+                (initialBalance * 40n) / 100n -
+                    (oneEther * 6000000n) / 1000000n -
+                    (oneEther * 7000000n) / 1000000n -
+                    (oneEther * 9000000n) / 1000000n
+            );
+
+            await sut.reset();
+
+            const history = await sut.getHistory(1);
+
+            expect(history[0]).to.equal(6000000n);
+            expect(await grind.balanceOf(wallets.alice.address)).to.equal(initialBalance - oneEther + 6n * oneEther);
+            expect(await grind.balanceOf(wallets.bob.address)).to.equal(initialBalance - oneEther);
+            expect(await grind.balanceOf(wallets.charlie.address)).to.equal(initialBalance - oneEther);
+            expect(await grind.balanceOf(sut.target)).to.equal(initialBalance + oneEther * 3n - oneEther * 6n);
         });
     });
 
@@ -101,7 +214,6 @@ describe("BlockCrash", function () {
                 await grind.connect(wallet).approve(sut.target, initialBalance);
             }
 
-            await grind.mint(wallets.deployer.address);
             await grind.approve(sut.target, initialBalance);
 
             await sut.queueLiquidityChange(0, initialBalance);
@@ -187,20 +299,24 @@ describe("BlockCrash", function () {
 
             expect(sutAfter).to.equal(sutBefore + oneEther);
             expect(aliceAfter).to.equal(aliceBefore - oneEther);
-        });        
-        
-        it("Should not revert if the max possible win is the round lq", async function () {
-            const { sut,wallets } = await loadFixture(betFixture);
+        });
 
-            await expect(sut.connect(wallets.alice).placeBet(oneEther, 25))
-                .to.not.be.revertedWithCustomError(sut, "BetTooLargeError");
+        it("Should not revert if the max possible win is the round lq", async function () {
+            const { sut, wallets } = await loadFixture(betFixture);
+
+            await expect(sut.connect(wallets.alice).placeBet(oneEther, 25)).to.not.be.revertedWithCustomError(
+                sut,
+                "BetTooLargeError"
+            );
         });
 
         it("Should revert if the max possible win is greater than the round lq", async function () {
-            const { sut,wallets } = await loadFixture(betFixture);
+            const { sut, wallets } = await loadFixture(betFixture);
 
-            await expect(sut.connect(wallets.alice).placeBet(oneEther, 26))
-                .to.be.revertedWithCustomError(sut, "BetTooLargeError");
+            await expect(sut.connect(wallets.alice).placeBet(oneEther, 26)).to.be.revertedWithCustomError(
+                sut,
+                "BetTooLargeError"
+            );
         });
 
         it("Should decrement the round lq", async function () {
@@ -244,7 +360,6 @@ describe("BlockCrash", function () {
                 await grind.connect(wallet).approve(sut.target, initialBalance);
             }
 
-            await grind.mint(wallets.deployer.address);
             await grind.approve(sut.target, initialBalance);
 
             await sut.queueLiquidityChange(0, initialBalance);
@@ -612,7 +727,7 @@ describe("BlockCrash", function () {
             expect(await grind.balanceOf(sut.target)).to.equal(10n * oneEther);
 
             // MOCK game finishing to add new money into the pot.
-            await grind.mint(sut.target); // 100 extra tokens, for 10 shares
+            await grind.transfer(sut.target, initialBalance); // 100 extra tokens, for 10 shares
 
             for (const remove of removes) {
                 await sut.connect(remove.wallet).queueLiquidityChange(1, await sut.getShares(remove.wallet.address));

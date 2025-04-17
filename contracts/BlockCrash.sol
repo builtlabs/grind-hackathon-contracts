@@ -19,6 +19,7 @@ contract BlockCrash {
     // #######################################################################################
 
     error ZeroAmountError();
+
     error InvalidBlockError();
     error InvalidActionError();
     error InvalidSenderError();
@@ -29,9 +30,9 @@ contract BlockCrash {
     error BetTooLargeError();
     error NotYourBetError();
 
-    error GameNotStartedError();
-    error GameNotOverError();
-    error GameOverError();
+    error RoundNotStartedError();
+    error RoundNotOverError();
+    error RoundOverError();
 
     // #######################################################################################
 
@@ -92,15 +93,20 @@ contract BlockCrash {
 
     // #######################################################################################
 
-    function getHistory(uint256 _start, uint256 _stop) external view returns (uint32[] memory) {
-        if (_start > _stop) revert InvalidAccessError();
-        if (_stop > _history.length) revert InvalidAccessError();
+    function getHistory(uint256 _amount) external view returns (uint32[] memory) {
+        if (_history.length < _amount) {
+            _amount = _history.length;
+        }
 
-        uint256 length = _stop - _start;
-        uint32[] memory history = new uint32[](length);
+        if (_amount == 0) {
+            return new uint32[](0);
+        }
 
-        for (uint256 i = 0; i < length; i++) {
-            history[i] = _history[_start + i];
+        uint256 _start = _history.length - 1;
+        uint32[] memory history = new uint32[](_amount);
+
+        for (uint256 i = 0; i < _amount; i++) {
+            history[i] = _history[_start - i];
         }
 
         return history;
@@ -132,8 +138,8 @@ contract BlockCrash {
         return userBets;
     }
 
-    function getRoundInfo() external view returns (uint256 c, uint256 sb, uint256 lq) {
-        return (_history.length, _roundStartBlock, _roundLiquidity);
+    function getRoundInfo() external view returns (uint256 sb, uint256 eb, uint256 lq) {
+        return (_roundStartBlock, _roundDeadBlock(), _roundLiquidity);
     }
 
     function getTotalShares() external view returns (uint256) {
@@ -187,36 +193,23 @@ contract BlockCrash {
         if (bet.user != msg.sender) revert NotYourBetError();
 
         // Ensure the game has started
-        if (_bn < _roundStartBlock) revert GameNotStartedError();
+        if (_bn < _roundStartBlock) revert RoundNotStartedError();
 
         // Ensure the game is still running
         uint64 blockIndex = _bn - _roundStartBlock;
 
-        if (blockIndex > bet.cashoutIndex || _roundIsOver(_roundDeadBlock())) revert GameOverError();
+        if (blockIndex > bet.cashoutIndex || _roundIsOver(_roundDeadBlock())) revert RoundOverError();
 
         // Update the cashout
         bet.cashoutIndex = blockIndex;
     }
 
-    function reset() external OnlyRunner {
-        // Ensure the game can be reset
+    function reset() external {
         if (_roundStartBlock > 0) {
-            uint64 deadBlock = _roundDeadBlock();
-
-            if (!_roundIsOver(deadBlock)) revert GameNotOverError();
-
-            uint64 deadIndex = deadBlock == 0 ? ROUND_LENGTH : deadBlock - _roundStartBlock;
-            _history.push(uint32(deadIndex == 0 ? 0 : _multiplier(deadIndex - 1)));
-
-            _processBets(deadIndex);
-            _roundStartBlock = 0;
+            _resetRound();
         }
 
-        // Clean up queues
         _processLiquidityQueue();
-
-        // Reset round state
-        _roundLiquidity = (GRIND.balanceOf(address(this)) * 40) / 100; // 40% of LP risked per round
     }
 
     function queueLiquidityChange(uint8 _action, uint256 _amount) external NotZero(_amount) {
@@ -227,6 +220,18 @@ contract BlockCrash {
     }
 
     // #######################################################################################
+
+    function _resetRound() private OnlyRunner {
+        uint64 deadBlock = _roundDeadBlock();
+
+        if (!_roundIsOver(deadBlock)) revert RoundNotOverError();
+
+        uint64 deadIndex = deadBlock == 0 ? ROUND_LENGTH : deadBlock - _roundStartBlock;
+        _history.push(uint32(deadIndex == 0 ? 0 : _multiplier(deadIndex - 1)));
+
+        _processBets(deadIndex);
+        _roundStartBlock = 0;
+    }
 
     function _processBets(uint64 _deadIndex) private {
         for (uint256 i = 0; i < _bets.length; i++) {
@@ -255,6 +260,8 @@ contract BlockCrash {
         }
 
         delete _liquidityQueue;
+
+        _roundLiquidity = (GRIND.balanceOf(address(this)) * 40) / 100; // 40% of LP risked per round
     }
 
     function _addLiquidity(address _user, uint256 _amount, uint256 _balance) private returns (uint256) {
@@ -299,6 +306,7 @@ contract BlockCrash {
     // #######################################################################################
 
     function _getRNG(uint256 _index) internal view virtual returns (uint256) {
+        // TODO: This is unsafe, need to provide a commit/reveal to augment this on mainnet
         return uint256(blockhash(_index));
     }
 
