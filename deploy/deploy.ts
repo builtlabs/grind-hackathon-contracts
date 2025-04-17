@@ -1,51 +1,61 @@
-import { Wallet } from "zksync-ethers";
-import { HardhatRuntimeEnvironment } from "hardhat/types";
-import { Deployer } from "@matterlabs/hardhat-zksync";
-import { vars } from "hardhat/config";
+import hre from "hardhat";
 import { ethers } from "hardhat";
+import { vars } from "hardhat/config";
+import { HardhatRuntimeEnvironment } from "hardhat/types";
 
-const runner = "0xc2bDed4B045bfdB5F051a13a55ed63FeEA45CB00";
+import { Wallet } from "zksync-ethers";
+import { Deployer } from "@matterlabs/hardhat-zksync";
 
 const initialBalance = ethers.parseEther("100000");
 
 export default async function (hre: HardhatRuntimeEnvironment) {
-  console.log(`Running deploy script`, hre.network.name);
+    console.log(`Running deploy script`, hre.network.name);
 
-  const wallet = new Wallet(vars.get(hre.network.name === "abstractTestnet" ? "DEV_PRIVATE_KEY" : "PRIVATE_KEY"));
+    const wallet = new Wallet(vars.get(hre.network.name === "abstractTestnet" ? "DEV_PRIVATE_KEY" : "PRIVATE_KEY"));
 
-  const deployer = new Deployer(hre, wallet);
+    const deployer = new Deployer(hre, wallet);
 
-  const GRIND = await deployer.loadArtifact("Grind");
-  const BLOCKCRASH = await deployer.loadArtifact("BlockCrash");
-  
-  const grind = await deployer.deploy(GRIND);
-  await grind.waitForDeployment();
+    const GRIND = await deployer.loadArtifact("Grind");
+    const HASHCRASH = await deployer.loadArtifact("HashCrash");
 
-  const grindAddress = await grind.getAddress();
+    const grind = await deployer.deploy(GRIND);
+    await grind.waitForDeployment();
 
-  const blockCrash = await deployer.deploy(BLOCKCRASH, [grindAddress, runner]);
-  await blockCrash.waitForDeployment();
-  
-  const blockCrashAddress = await blockCrash.getAddress();
+    const grindAddress = await grind.getAddress();
 
-  await tx(grind.approve(blockCrashAddress, initialBalance));
-  await tx(blockCrash.queueLiquidityChange(0, initialBalance));
-  await tx(blockCrash.reset());
-  await tx(grind.mint());
+    const hashCrash = await deployer.deploy(HASHCRASH, [grindAddress]);
+    await hashCrash.waitForDeployment();
 
-  console.log(
-    `${
-      GRIND.contractName
-    } was deployed to ${grindAddress}`
-  );
+    const hashCrashAddress = await hashCrash.getAddress();
 
-  console.log(
-    `${
-      BLOCKCRASH.contractName
-    } was deployed to ${blockCrashAddress}`
-  );
+    await tx(grind.approve(hashCrashAddress, initialBalance));
+    await tx(hashCrash.queueLiquidityChange(0, initialBalance));
+    await tx(hashCrash.reset());
+    await tx(grind.mint());
+
+    console.log(`${GRIND.contractName} was deployed to ${grindAddress}`);
+    console.log(`${HASHCRASH.contractName} was deployed to ${hashCrashAddress}`);
+
+    await sleep(20000);
+
+    await verify(grindAddress, []);
+    await verify(hashCrashAddress, [grindAddress]);
 }
 
 async function tx(transaction: Promise<any>) {
-  await (await transaction).wait();
+    await (await transaction).wait();
+}
+
+async function verify(address: string, args: any[]) {
+    await sleep(1000);
+    return hre.run("verify:verify", {
+        address,
+        constructorArguments: args,
+    });
+}
+
+function sleep(ms: number) {
+    return new Promise((resolve) => {
+        setTimeout(resolve, ms);
+    });
 }
