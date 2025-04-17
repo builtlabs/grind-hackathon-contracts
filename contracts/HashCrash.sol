@@ -4,16 +4,15 @@ pragma solidity ^0.8.24;
 import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import { SafeERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
-/// @title BlockCrash
+/// @title HashCrash
 /// @author @builtbyfrancis
-contract BlockCrash {
+contract HashCrash {
     uint256 public constant MULTIPLIER_DENOMINATOR = 1e6;
     uint256 public constant PROBABILITY_DENOMINATOR = 1e18;
 
     uint64 public constant ROUND_LENGTH = 50;
     uint64 public constant ROUND_BUFFER = 20;
 
-    address public immutable RUNNER;
     IERC20 public immutable GRIND;
 
     // #######################################################################################
@@ -28,11 +27,14 @@ contract BlockCrash {
 
     error BetsClosedError();
     error BetTooLargeError();
+
     error NotYourBetError();
 
+    error RoundStartedError();
     error RoundNotStartedError();
-    error RoundNotOverError();
+
     error RoundOverError();
+    error RoundNotOverError();
 
     // #######################################################################################
 
@@ -42,14 +44,11 @@ contract BlockCrash {
 
     // #######################################################################################
 
-    struct User {
-        uint256 shares;
-    }
-
     struct Bet {
         uint256 amount;
         address user;
         uint64 cashoutIndex;
+        bool cancelled;
     }
 
     struct LiquidityDelta {
@@ -65,7 +64,7 @@ contract BlockCrash {
     uint256 private _roundLiquidity;
     uint64 private _roundStartBlock;
 
-    mapping(address => User) private _users;
+    mapping(address => uint256) private _shareMap;
 
     LiquidityDelta[] private _liquidityQueue;
     Bet[] private _bets;
@@ -79,16 +78,10 @@ contract BlockCrash {
         _;
     }
 
-    modifier OnlyRunner() {
-        if (msg.sender != RUNNER) revert InvalidSenderError();
-        _;
-    }
-
     // #######################################################################################
 
-    constructor(IERC20 grind_, address runner_) {
+    constructor(IERC20 grind_) {
         GRIND = grind_;
-        RUNNER = runner_;
     }
 
     // #######################################################################################
@@ -147,7 +140,7 @@ contract BlockCrash {
     }
 
     function getShares(address _user) external view returns (uint256) {
-        return _users[_user].shares;
+        return _shareMap[_user];
     }
 
     function getLiquidityQueue() external view returns (LiquidityDelta[] memory) {
@@ -155,8 +148,6 @@ contract BlockCrash {
     }
 
     // #######################################################################################
-
-    // TODO: Do we want a cancel bet? Kinda annoying with the array but is possible
 
     function placeBet(uint256 _amount, uint64 _autoCashout) external NotZero(_amount) {
         // Start the round if it hasn't started yet
@@ -182,7 +173,28 @@ contract BlockCrash {
         }
 
         // Store the bet
-        _bets.push(Bet(_amount, msg.sender, _autoCashout));
+        _bets.push(Bet(_amount, msg.sender, _autoCashout, false));
+    }
+
+    function cancelBet(uint256 _index) external {
+        Bet storage bet = _bets[_index];
+
+        // Ensure the caller owns the bet
+        if (bet.user != msg.sender || bet.cancelled) revert NotYourBetError();
+
+        // Ensure the game not has started
+        if (_roundStartBlock <= block.number) revert RoundStartedError();
+
+        // Cancel the bet
+        bet.cancelled = true;
+
+        // Refund the bet
+        SafeERC20.safeTransfer(GRIND, msg.sender, bet.amount);
+
+        // Update the _roundLiquidity
+        unchecked {
+            _roundLiquidity += (bet.amount * _multiplier(bet.cashoutIndex)) / MULTIPLIER_DENOMINATOR;
+        }
     }
 
     function cashEarly(uint256 _index) external {
@@ -190,7 +202,7 @@ contract BlockCrash {
         uint64 _bn = uint64(block.number);
 
         // Ensure the caller owns the bet
-        if (bet.user != msg.sender) revert NotYourBetError();
+        if (bet.user != msg.sender || bet.cancelled) revert NotYourBetError();
 
         // Ensure the game has started
         if (_bn < _roundStartBlock) revert RoundNotStartedError();
@@ -221,7 +233,7 @@ contract BlockCrash {
 
     // #######################################################################################
 
-    function _resetRound() private OnlyRunner {
+    function _resetRound() private {
         uint64 deadBlock = _roundDeadBlock();
 
         if (!_roundIsOver(deadBlock)) revert RoundNotOverError();
@@ -237,7 +249,7 @@ contract BlockCrash {
         for (uint256 i = 0; i < _bets.length; i++) {
             Bet storage bet = _bets[i];
 
-            if (bet.cashoutIndex < _deadIndex) {
+            if (!bet.cancelled && bet.cashoutIndex < _deadIndex) {
                 uint256 winAmount = (bet.amount * _multiplier(bet.cashoutIndex)) / MULTIPLIER_DENOMINATOR;
                 SafeERC20.safeTransfer(GRIND, bet.user, winAmount);
             }
@@ -273,7 +285,7 @@ contract BlockCrash {
 
         uint256 newShares = _totalShares == 0 ? _amount : (_amount * _totalShares) / _balance;
         unchecked {
-            _users[_user].shares += newShares;
+            _shareMap[_user] += newShares;
             _totalShares += newShares;
         }
 
@@ -283,16 +295,14 @@ contract BlockCrash {
     }
 
     function _removeLiquidity(address _user, uint256 _amount, uint256 _balance) private returns (uint256) {
-        User storage user = _users[_user];
-
-        if (user.shares < _amount) {
+        if (_shareMap[_user] < _amount) {
             return 0;
         }
 
         uint256 withdrawAmount = (_amount * _balance) / _totalShares;
 
         unchecked {
-            user.shares -= _amount;
+            _shareMap[_user] -= _amount;
             _totalShares -= _amount;
         }
 
@@ -306,7 +316,7 @@ contract BlockCrash {
     // #######################################################################################
 
     function _getRNG(uint256 _index) internal view virtual returns (uint256) {
-        // TODO: This is unsafe, need to provide a commit/reveal to augment this on mainnet
+        // TODO: This is (kinda) unsafe, need to provide a commit/reveal to augment this on mainnet
         return uint256(blockhash(_index));
     }
 
