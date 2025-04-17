@@ -248,6 +248,180 @@ describe("HashCrash", function () {
         });
     });
 
+    describe("getHistory", function () {
+        it("Should return an empty array by default", async function () {
+            const { sut } = await loadFixture(baseFixture);
+
+            const history = await sut.getHistory(0);
+            expect(history).to.be.empty;
+        });
+
+        it("Should decrease the amount to the history length if needed", async function () {
+            const { sut } = await loadFixture(baseFixture);
+
+            const history = await sut.getHistory(1000);
+            expect(history).to.be.empty;
+        });
+
+        it("Should return the history", async function () {
+            const { sut, wallets } = await loadFixture(knownGameFixture);
+
+            await sut.connect(wallets.alice).placeBet(oneEther, 10);
+            await sut.connect(wallets.bob).placeBet(oneEther, 11);
+            await sut.connect(wallets.charlie).placeBet(oneEther, 12);
+
+            await mine(100);
+
+            await sut.reset();
+
+            const history = await sut.getHistory(10);
+
+            expect(history.length).to.equal(1);
+            expect(history[0]).to.equal(6000000n);
+        });
+    });
+
+    describe("getBets", function () {
+        it("Should return an empty array by default", async function () {
+            const { sut } = await loadFixture(baseFixture);
+
+            const bets = await sut.getBets();
+            expect(bets).to.be.empty;
+        });
+
+        it("Should return the bets", async function () {
+            const { sut, wallets } = await loadFixture(liquidFixture);
+
+            await sut.connect(wallets.alice).placeBet(oneEther, 4);
+            await sut.connect(wallets.alice).cancelBet(0);
+
+            await sut.connect(wallets.bob).placeBet(oneEther * 2n, 5);
+
+            const bets = await sut.getBets();
+            
+            expect(bets.length).to.equal(2);
+
+            expect(bets[0].user).to.equal(wallets.alice.address);
+            expect(bets[0].amount).to.equal(oneEther);
+            expect(bets[0].cashoutIndex).to.equal(4n);
+            expect(bets[0].cancelled).to.equal(true);
+
+            expect(bets[1].user).to.equal(wallets.bob.address);
+            expect(bets[1].amount).to.equal(oneEther * 2n);
+            expect(bets[1].cashoutIndex).to.equal(5n);
+            expect(bets[1].cancelled).to.equal(false);
+        });
+    });
+
+    describe("getBetsFor", function () {
+        it("Should return an empty array by default", async function () {
+            const { sut, wallets } = await loadFixture(baseFixture);
+
+            const bets = await sut.getBetsFor(wallets.alice.address);
+            expect(bets).to.be.empty;
+        });
+
+        it("Should return the bets", async function () {
+            const { sut, wallets } = await loadFixture(liquidFixture);
+
+            await sut.connect(wallets.alice).placeBet(oneEther, 4);
+            await sut.connect(wallets.alice).cancelBet(0);
+
+            await sut.connect(wallets.bob).placeBet(oneEther * 2n, 5);
+
+            const alice = await sut.getBetsFor(wallets.alice.address);
+            
+            expect(alice.length).to.equal(1);
+            expect(alice[0].user).to.equal(wallets.alice.address);
+            expect(alice[0].amount).to.equal(oneEther);
+            expect(alice[0].cashoutIndex).to.equal(4n);
+            expect(alice[0].cancelled).to.equal(true);
+            
+            const bob = await sut.getBetsFor(wallets.bob.address);
+            expect(bob.length).to.equal(1);
+            expect(bob[0].user).to.equal(wallets.bob.address);
+            expect(bob[0].amount).to.equal(oneEther * 2n);
+            expect(bob[0].cashoutIndex).to.equal(5n);
+            expect(bob[0].cancelled).to.equal(false);
+        });
+    });
+
+    describe("getRoundInfo", function () {
+        it("Should return 0 for all by default", async function () {
+            const { sut } = await loadFixture(baseFixture);
+
+            const round = await sut.getRoundInfo();
+            expect(round.sb).to.equal(0n);
+            expect(round.eb).to.equal(0n);
+            expect(round.lq).to.equal(0n);
+        });
+
+        it("Should return the start block, end block and remaining lq", async function () {
+            const { sut, wallets } = await loadFixture(knownGameFixture);
+
+            await sut.connect(wallets.alice).placeBet(oneEther, 10);
+            await mine(100);
+
+            const round = await sut.getRoundInfo();
+            expect(round.sb).to.equal(33n);
+            expect(round.eb).to.equal(44n);
+            expect(round.lq).to.equal((initialBalance * 40n) / 100n - (oneEther * 6000000n) / 1000000n);
+        });
+    });
+
+    describe("getTotalShares", function () {
+        it("Should return 0 by default", async function () {
+            const { sut } = await loadFixture(baseFixture);
+
+            expect(await sut.getTotalShares()).to.equal(0n);
+        });
+
+        it("Should return the total number of shares", async function () {
+            const { sut } = await loadFixture(liquidFixture);
+
+            expect(await sut.getTotalShares()).to.equal(initialBalance);
+        });
+    });
+
+    describe("getShares", function () {
+        it("Should return 0 by default", async function () {
+            const { sut, wallets } = await loadFixture(baseFixture);
+
+            expect(await sut.getShares(wallets.deployer.address)).to.equal(0n);
+        });
+
+        it("Should return the number of shares a user has", async function () {
+            const { sut, wallets } = await loadFixture(liquidFixture);
+
+            expect(await sut.getShares(wallets.deployer.address)).to.equal(initialBalance);
+        });
+    });
+
+    describe("getLiquidityQueue", function () {
+        it("Should return an empty array by default", async function () {
+            const { sut } = await loadFixture(baseFixture);
+
+            const queue = await sut.getLiquidityQueue();
+            expect(queue).to.be.empty;
+        });
+
+        it("Should return the queue", async function () {
+            const { sut, wallets } = await loadFixture(baseFixture);
+
+            await sut.connect(wallets.alice).queueLiquidityChange(0, oneEther);
+            await sut.connect(wallets.bob).queueLiquidityChange(1, oneEther * 2n);
+            await sut.connect(wallets.charlie).queueLiquidityChange(0, oneEther * 3n);
+
+            const queue = await sut.getLiquidityQueue();
+            expect(queue.length).to.equal(3);
+            expect(queue).to.deep.equal([
+                [0, wallets.alice.address, oneEther],
+                [1, wallets.bob.address, oneEther * 2n],
+                [0, wallets.charlie.address, oneEther * 3n],
+            ]);
+        });
+    });
+
     describe("placeBet", function () {
         it("Should revert if the amount is 0", async function () {
             const { sut } = await loadFixture(liquidFixture);

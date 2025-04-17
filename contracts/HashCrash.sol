@@ -327,6 +327,10 @@ contract HashCrash {
     }
 
     function _roundDeadBlock() private view returns (uint64) {
+        if (_roundStartBlock == 0) {
+            return 0;
+        }
+
         uint64 _max = _roundStartBlock + ROUND_LENGTH;
         return _findDeadHash(_roundStartBlock, _max < block.number ? _max : uint64(block.number));
     }
