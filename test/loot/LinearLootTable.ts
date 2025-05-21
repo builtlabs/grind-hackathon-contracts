@@ -154,12 +154,12 @@ describe("LinearLootTable", function () {
         });
     });
 
-    // NOTE: This test is slow, so it's skipped by default. Uncomment to run.
+    // NOTE: This test is slow (about 20-30 minutes), so it's skipped by default.
     describe.skip("local random large sample size (SLOW, remove skip to run)", function () {
-        it("Should produce the expected ev on chain for every ", async function () {
+        it("Should produce the expected ev on chain", async function () {
             const { sut } = await loadFixture(fixture);
 
-            const iterations = 100000;
+            const iterations = 500000;
             const visits = new Map<number, number>();
 
             for (let i = 0; i < iterations; i++) {
