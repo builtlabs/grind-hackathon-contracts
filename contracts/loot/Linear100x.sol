@@ -1,34 +1,16 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-/// @title LinearLootTable
+import { LootTable } from "./LootTable.sol";
+
+/// @title Linear100x
 /// @author @builtbyfrancis
-library LinearLootTable {
-    uint256 private constant MULTIPLIER_DENOMINATOR = 1e6;
-    uint256 private constant PROBABILITY_DENOMINATOR = 1e18;
-
-    error InvalidIndexError();
-
-    // #######################################################################################
-
-    modifier validIndex(uint256 _index) {
-        if (_index > 49) revert InvalidIndexError();
-        _;
+contract Linear100x is LootTable {
+    function _getLength() internal pure override returns (uint256) {
+        return 50;
     }
 
-    // #######################################################################################
-
-    function multiply(uint256 _value, uint256 _index) internal pure validIndex(_index) returns (uint256) {
-        return (_value * _multiplier(_index)) / MULTIPLIER_DENOMINATOR;
-    }
-
-    function isDead(uint256 _rng, uint256 _index) internal pure validIndex(_index) returns (bool) {
-        return _rng % PROBABILITY_DENOMINATOR < _probability(_index);
-    }
-
-    // #######################################################################################
-
-    function _multiplier(uint256 _index) private pure returns (uint256) {
+    function _multiplier(uint256 _index) internal pure override returns (uint256) {
         return
             [
                 1010000,
@@ -84,7 +66,7 @@ library LinearLootTable {
             ][_index];
     }
 
-    function _probability(uint256 _index) private pure returns (uint256) {
+    function _probability(uint256 _index) internal pure override returns (uint256) {
         return
             [
                 39603960396039640,
