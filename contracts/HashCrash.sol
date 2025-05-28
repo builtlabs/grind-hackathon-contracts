@@ -1,46 +1,33 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import { SafeERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import { Liquidity } from "./liquidity/Liquidity.sol";
+import { ILootTable } from "./interfaces/ILootTable.sol";
+import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
 
 /// @title HashCrash
 /// @author @builtbyfrancis
-contract HashCrash {
-    uint256 public constant MULTIPLIER_DENOMINATOR = 1e6;
-    uint256 public constant PROBABILITY_DENOMINATOR = 1e18;
+abstract contract HashCrash is Liquidity {
+    error BetNotFoundError();
+    error BetNotYoursError();
+    error BetCancelledError();
 
-    uint64 public constant ROUND_LENGTH = 50;
-    uint64 public constant ROUND_BUFFER = 20;
+    error NotHashProducerError();
 
-    IERC20 public immutable GRIND;
-
-    // #######################################################################################
-
-    error ZeroAmountError();
-
-    error InvalidBlockError();
-    error InvalidActionError();
-    error InvalidSenderError();
-    error InvalidAccessError();
-    error InvalidCashoutError();
-
-    error BetsClosedError();
-    error BetTooLargeError();
-
-    error NotYourBetError();
-
-    error RoundStartedError();
+    error RoundInProgressError();
     error RoundNotStartedError();
 
-    error RoundOverError();
-    error RoundNotOverError();
+    error InvalidHashError();
+    error InvalidCashoutIndexError();
 
-    // #######################################################################################
+    event RoundStarted(bytes32 indexed roundHash, uint64 startBlock);
+    event RoundEnded(bytes32 indexed roundHash, bytes32 roundSalt, uint64 deadIndex);
 
-    event LiquidityChangeQueued(uint8 indexed action, address indexed user, uint256 amount);
-    event LiquidityAdded(address indexed user, uint256 tokenDelta, uint256 shareDelta);
-    event LiquidityRemoved(address indexed user, uint256 tokenDelta, uint256 shareDelta);
+    event BetPlaced(bytes32 indexed roundHash, address indexed user, uint256 amount, uint64 cashoutIndex);
+    event BetCashoutUpdated(bytes32 indexed roundHash, uint256 indexed index, uint64 cashoutIndex);
+    event BetCancelled(bytes32 indexed roundHash, uint256 indexed index);
+
+    event LootTableUpdated(ILootTable lootTable);
 
     // #######################################################################################
 
@@ -51,59 +38,40 @@ contract HashCrash {
         bool cancelled;
     }
 
-    struct LiquidityDelta {
-        uint8 action; // 0 = add, 1 = remove
-        address user;
-        uint256 amount;
-    }
-
-    // #######################################################################################
-
-    uint256 private _totalShares;
-
-    uint256 private _roundLiquidity;
-    uint64 private _roundStartBlock;
-
-    mapping(address => uint256) private _shareMap;
-
-    LiquidityDelta[] private _liquidityQueue;
-    Bet[] private _bets;
-
-    uint32[] private _history; // TODO: move onto graph
-
-    // #######################################################################################
-
-    modifier NotZero(uint256 _amount) {
-        if (_amount == 0) revert ZeroAmountError();
+    modifier onlyHashProducer() {
+        if (msg.sender != _hashProducer) revert NotHashProducerError();
         _;
     }
 
     // #######################################################################################
 
-    constructor(IERC20 grind_) {
-        GRIND = grind_;
-    }
+    Bet[] private _bets;
+
+    bytes32 private _roundHash;
+    address private _hashProducer;
+    uint64 private _roundStartBlock;
+
+    ILootTable private _lootTable;
+    uint64 private _introBlocks;
+
+    ILootTable private _stagedLootTable;
 
     // #######################################################################################
 
-    function getHistory(uint256 _amount) external view returns (uint32[] memory) {
-        if (_history.length < _amount) {
-            _amount = _history.length;
-        }
+    constructor(
+        ILootTable lootTable_,
+        bytes32 genesisHash_,
+        address hashProducer_,
+        address owner_
+    ) Liquidity() Ownable(owner_) {
+        _introBlocks = 20;
+        _roundHash = genesisHash_;
+        _hashProducer = hashProducer_;
 
-        if (_amount == 0) {
-            return new uint32[](0);
-        }
-
-        uint256 _start = _history.length - 1;
-        uint32[] memory history = new uint32[](_amount);
-
-        for (uint256 i = 0; i < _amount; i++) {
-            history[i] = _history[_start - i];
-        }
-
-        return history;
+        _setLootTable(lootTable_);
     }
+
+    // ########################################################################################
 
     function getBets() external view returns (Bet[] memory) {
         return _bets;
@@ -131,333 +99,205 @@ contract HashCrash {
         return userBets;
     }
 
-    function getRoundInfo() external view returns (uint256 sb, uint256 eb, uint256 lq) {
-        return (_roundStartBlock, _roundDeadBlock(), _roundLiquidity);
+    function getRoundInfo()
+        external
+        view
+        returns (uint64 _startBlock, uint256 _roundLiquidity, bytes32 _hash, bytes32[] memory _blockHashes)
+    {
+        _startBlock = _roundStartBlock;
+        _roundLiquidity = _getRoundLiquidity();
+        _hash = _roundHash;
+
+        if (_startBlock >= block.number) {
+            _blockHashes = new bytes32[](0);
+        } else {
+            uint64 length = uint64(block.number) - _startBlock;
+            _blockHashes = new bytes32[](length);
+
+            for (uint64 i = 0; i < length; i++) {
+                _blockHashes[i] = _getBlockHash(_startBlock + i);
+            }
+        }
     }
 
-    function getTotalShares() external view returns (uint256) {
-        return _totalShares;
+    function getSettings() external view returns (ILootTable lootTable_, address hashProducer_, uint64 introBlocks_) {
+        lootTable_ = _lootTable;
+        hashProducer_ = _hashProducer;
+        introBlocks_ = _introBlocks;
     }
 
-    function getShares(address _user) external view returns (uint256) {
-        return _shareMap[_user];
+    // ########################################################################################
+
+    function setHashProducer(address hashProducer_) external onlyOwner {
+        _hashProducer = hashProducer_;
     }
 
-    function getLiquidityQueue() external view returns (LiquidityDelta[] memory) {
-        return _liquidityQueue;
+    function setIntroBlocks(uint64 introBlocks_) external onlyOwner {
+        _introBlocks = introBlocks_;
     }
 
-    // #######################################################################################
+    function setLootTable(ILootTable lootTable_) external onlyOwner {
+        if (_isIdle()) {
+            _setLootTable(lootTable_);
+        } else {
+            _stagedLootTable = lootTable_;
+        }
+    }
 
-    function placeBet(uint256 _amount, uint64 _autoCashout) external NotZero(_amount) {
-        // Start the round if it hasn't started yet
+    // ########################################################################################
+
+    function placeBet(uint256 _amount, uint64 _autoCashout) external payable notZero(_amount) {
         if (_roundStartBlock == 0) {
-            _roundStartBlock = uint64(block.number) + ROUND_BUFFER;
+            _initialiseRound();
         }
 
         // Ensure the bet is valid
-        if (ROUND_LENGTH <= _autoCashout) revert InvalidCashoutError();
-        if (_roundStartBlock <= block.number) revert BetsClosedError();
+        if (_roundStartBlock <= block.number) revert RoundInProgressError();
+        if (_lootTable.getLength() <= _autoCashout) revert InvalidCashoutIndexError();
 
-        // Store the funds
-        SafeERC20.safeTransferFrom(GRIND, msg.sender, address(this), _amount);
+        // Ensure the user has enough funds
+        _receiveValue(msg.sender, _amount);
 
-        // Reduce the _roundLiquidity by the amount of the bet
-        uint256 maxWin = (_amount * _multiplier(_autoCashout)) / MULTIPLIER_DENOMINATOR;
-        if (maxWin > _roundLiquidity) {
-            revert BetTooLargeError();
-        }
-
-        unchecked {
-            _roundLiquidity -= maxWin;
-        }
+        // Reduce the round liquidity by the users max win
+        _useRoundLiquidity(_lootTable.multiply(_amount, _autoCashout));
 
         // Store the bet
         _bets.push(Bet(_amount, msg.sender, _autoCashout, false));
+
+        // Emit an event for the bet placed
+        emit BetPlaced(_roundHash, msg.sender, _amount, _autoCashout);
+    }
+
+    function updateBet(uint256 _index, uint64 _autoCashout) external {
+        Bet storage bet = _getBet(_index);
+
+        // Ensure the update is valid
+        if (_roundStartBlock <= block.number) revert RoundInProgressError();
+        if (_lootTable.getLength() <= _autoCashout) revert InvalidCashoutIndexError();
+
+        // Update the round liquidity
+        _releaseRoundLiquidity(_lootTable.multiply(bet.amount, bet.cashoutIndex));
+        _useRoundLiquidity(_lootTable.multiply(bet.amount, _autoCashout));
+
+        // Update the bet
+        bet.cashoutIndex = _autoCashout;
+
+        // Emit an event for the bet updated
+        emit BetCashoutUpdated(_roundHash, _index, _autoCashout);
     }
 
     function cancelBet(uint256 _index) external {
-        Bet storage bet = _bets[_index];
+        Bet storage bet = _getBet(_index);
 
-        // Ensure the caller owns the bet
-        if (bet.user != msg.sender || bet.cancelled) revert NotYourBetError();
-
-        // Ensure the game not has started
-        if (_roundStartBlock <= block.number) revert RoundStartedError();
+        // Ensure the game has not started
+        if (_roundStartBlock <= block.number) revert RoundInProgressError();
 
         // Cancel the bet
         bet.cancelled = true;
 
         // Refund the bet
-        SafeERC20.safeTransfer(GRIND, msg.sender, bet.amount);
+        _sendValue(msg.sender, bet.amount);
 
-        // Update the _roundLiquidity
-        unchecked {
-            _roundLiquidity += (bet.amount * _multiplier(bet.cashoutIndex)) / MULTIPLIER_DENOMINATOR;
-        }
+        // Update the round liquidity
+        _releaseRoundLiquidity(_lootTable.multiply(bet.amount, bet.cashoutIndex));
+
+        // Emit an event for the bet cancelled
+        emit BetCancelled(_roundHash, _index);
     }
 
-    function cashEarly(uint256 _index) external {
-        Bet storage bet = _bets[_index];
-        uint64 _bn = uint64(block.number);
-
-        // Ensure the caller owns the bet
-        if (bet.user != msg.sender || bet.cancelled) revert NotYourBetError();
+    function cashout(uint256 _index) external {
+        Bet storage bet = _getBet(_index);
 
         // Ensure the game has started
+        uint64 _bn = uint64(block.number);
         if (_bn < _roundStartBlock) revert RoundNotStartedError();
 
-        // Ensure the game is still running
+        // Ensure the user has not cashed out already
         uint64 blockIndex = _bn - _roundStartBlock;
+        if (bet.cashoutIndex <= blockIndex) revert InvalidCashoutIndexError();
 
-        if (blockIndex > bet.cashoutIndex || _roundIsOver(_roundDeadBlock())) revert RoundOverError();
-
-        // Update the cashout
         bet.cashoutIndex = blockIndex;
+
+        emit BetCashoutUpdated(_roundHash, _index, blockIndex);
     }
 
-    function reset() external {
-        if (_roundStartBlock > 0) {
-            _resetRound();
-        }
+    function reveal(bytes32 _salt, bytes32 _nextHash) external onlyHashProducer {
+        if (keccak256(abi.encode(_salt)) != _roundHash) revert InvalidHashError();
 
-        _processLiquidityQueue();
-    }
-
-    function queueLiquidityChange(uint8 _action, uint256 _amount) external NotZero(_amount) {
-        if (_action > 1) revert InvalidActionError();
-
-        _liquidityQueue.push(LiquidityDelta(_action, msg.sender, _amount));
-        emit LiquidityChangeQueued(_action, msg.sender, _amount);
-    }
-
-    // #######################################################################################
-
-    function _resetRound() private {
-        uint64 deadBlock = _roundDeadBlock();
-
-        if (!_roundIsOver(deadBlock)) revert RoundNotOverError();
-
-        uint64 deadIndex = deadBlock == 0 ? ROUND_LENGTH : deadBlock - _roundStartBlock;
-        _history.push(uint32(deadIndex == 0 ? 0 : _multiplier(deadIndex - 1)));
+        uint64 deadIndex = _getDeadIndex(_salt);
 
         _processBets(deadIndex);
+        _clearLiquidityQueue();
+
+        emit RoundEnded(_roundHash, _salt, deadIndex);
+
         _roundStartBlock = 0;
+        _roundHash = _nextHash;
     }
 
-    function _processBets(uint64 _deadIndex) private {
+    // ########################################################################################
+
+    function _canChangeLiquidity() internal view override returns (bool) {
+        return _isIdle();
+    }
+
+    // ########################################################################################
+
+    function _isIdle() private view returns (bool) {
+        return _roundStartBlock == 0;
+    }
+
+    function _getBet(uint256 _index) private view returns (Bet storage bet_) {
+        if (_index >= _bets.length) revert BetNotFoundError();
+
+        bet_ = _bets[_index];
+
+        if (bet_.user != msg.sender) revert BetNotYoursError();
+        if (bet_.cancelled) revert BetCancelledError();
+    }
+
+    function _getDeadIndex(bytes32 _salt) private view returns (uint64) {
+        uint64 length = uint64(_lootTable.getLength());
+
+        for (uint64 i = 0; i < length; i++) {
+            uint256 rng = uint256(keccak256(abi.encode(_salt, _getBlockHash(_roundStartBlock + i))));
+
+            if (_lootTable.isDead(rng, i)) {
+                return i;
+            }
+        }
+        return length;
+    }
+
+    function _getBlockHash(uint256 _blockNumber) private view returns (bytes32 blockHash_) {
+        blockHash_ = blockhash(_blockNumber);
+        if (blockHash_ == bytes32(0)) revert InvalidHashError();
+    }
+
+    function _initialiseRound() private {
+        if (_stagedLootTable != ILootTable(address(0))) {
+            _setLootTable(_stagedLootTable);
+            delete _stagedLootTable;
+        }
+
+        _roundStartBlock = uint64(block.number) + _introBlocks;
+        emit RoundStarted(_roundHash, _roundStartBlock);
+    }
+
+    function _setLootTable(ILootTable lootTable_) private {
+        _lootTable = lootTable_;
+        emit LootTableUpdated(lootTable_);
+    }
+
+    function _processBets(uint64 _deadIndex) internal {
         for (uint256 i = 0; i < _bets.length; i++) {
             Bet storage bet = _bets[i];
 
             if (!bet.cancelled && bet.cashoutIndex < _deadIndex) {
-                uint256 winAmount = (bet.amount * _multiplier(bet.cashoutIndex)) / MULTIPLIER_DENOMINATOR;
-                SafeERC20.safeTransfer(GRIND, bet.user, winAmount);
+                _sendValue(bet.user, _lootTable.multiply(bet.amount, bet.cashoutIndex));
             }
         }
 
         delete _bets;
-    }
-
-    function _processLiquidityQueue() private {
-        uint256 _balance = GRIND.balanceOf(address(this));
-
-        for (uint256 i = 0; i < _liquidityQueue.length; i++) {
-            LiquidityDelta memory delta = _liquidityQueue[i];
-
-            if (delta.action == 0) {
-                _balance += _addLiquidity(delta.user, delta.amount, _balance);
-            } else {
-                _balance -= _removeLiquidity(delta.user, delta.amount, _balance);
-            }
-        }
-
-        delete _liquidityQueue;
-
-        _roundLiquidity = (GRIND.balanceOf(address(this)) * 40) / 100; // 40% of LP risked per round
-    }
-
-    function _addLiquidity(address _user, uint256 _amount, uint256 _balance) private returns (uint256) {
-        if (GRIND.balanceOf(_user) < _amount || GRIND.allowance(_user, address(this)) < _amount) {
-            return 0;
-        }
-
-        SafeERC20.safeTransferFrom(GRIND, _user, address(this), _amount);
-
-        uint256 newShares = _totalShares == 0 ? _amount : (_amount * _totalShares) / _balance;
-        unchecked {
-            _shareMap[_user] += newShares;
-            _totalShares += newShares;
-        }
-
-        emit LiquidityAdded(_user, _amount, newShares);
-
-        return _amount;
-    }
-
-    function _removeLiquidity(address _user, uint256 _amount, uint256 _balance) private returns (uint256) {
-        if (_shareMap[_user] < _amount) {
-            return 0;
-        }
-
-        uint256 withdrawAmount = (_amount * _balance) / _totalShares;
-
-        unchecked {
-            _shareMap[_user] -= _amount;
-            _totalShares -= _amount;
-        }
-
-        SafeERC20.safeTransfer(GRIND, _user, withdrawAmount);
-
-        emit LiquidityRemoved(_user, withdrawAmount, _amount);
-
-        return withdrawAmount;
-    }
-
-    // #######################################################################################
-
-    function _getRNG(uint256 _index) internal view virtual returns (uint256) {
-        // TODO: This is (kinda) unsafe, need to provide a commit/reveal to augment this on mainnet
-        return uint256(blockhash(_index));
-    }
-
-    // #######################################################################################
-
-    function _roundIsOver(uint64 _deadBlock) private view returns (bool) {
-        return block.number >= _roundStartBlock + ROUND_LENGTH || _deadBlock > 0;
-    }
-
-    function _roundDeadBlock() private view returns (uint64) {
-        if (_roundStartBlock == 0) {
-            return 0;
-        }
-
-        uint64 _max = _roundStartBlock + ROUND_LENGTH;
-        return _findDeadHash(_roundStartBlock, _max < block.number ? _max : uint64(block.number));
-    }
-
-    function _findDeadHash(uint64 _startBlock, uint64 _endBlock) private view returns (uint64) {
-        for (uint64 i = _startBlock; i < _endBlock; i++) {
-            if (_hashIsDead(uint256(_getRNG(i)), i - _startBlock)) {
-                return i;
-            }
-        }
-
-        return 0;
-    }
-
-    function _hashIsDead(uint256 _rng, uint256 _index) private pure returns (bool) {
-        return _rng % PROBABILITY_DENOMINATOR < _probability(_index);
-    }
-
-    function _multiplier(uint256 _index) private pure returns (uint256) {
-        return
-            [
-                500000,
-                750000,
-                1000000,
-                1250000,
-                1500000,
-                2000000,
-                2500000,
-                3000000,
-                4000000,
-                5000000,
-                6000000,
-                7000000,
-                9000000,
-                10000000,
-                12500000,
-                15000000,
-                17500000,
-                20000000,
-                22500000,
-                25000000,
-                27500000,
-                30000000,
-                32500000,
-                35000000,
-                37500000,
-                40000000,
-                42500000,
-                45000000,
-                47500000,
-                50000000,
-                52500000,
-                55000000,
-                57500000,
-                60000000,
-                62500000,
-                65000000,
-                67500000,
-                70000000,
-                72500000,
-                75000000,
-                77500000,
-                80000000,
-                82500000,
-                85000000,
-                87500000,
-                90000000,
-                92500000,
-                95000000,
-                97500000,
-                100000000
-            ][_index];
-    }
-
-    function _probability(uint256 _index) private pure returns (uint256) {
-        return
-            [
-                10000000000000008,
-                10101010101010056,
-                10204081632653072,
-                199999999999999968,
-                166752577319587712,
-                249922672440457728,
-                199999999999999968,
-                166752577319587712,
-                249922672440457728,
-                199999999999999968,
-                167010309278350592,
-                142945544554455296,
-                222382671480144448,
-                99350046425255360,
-                199999999999999968,
-                167525773195876256,
-                142414860681114640,
-                124548736462093856,
-                111340206185567056,
-                99767981438515056,
-                92783505154639184,
-                82386363636363648,
-                77399380804953680,
-                70469798657718184,
-                68592057761732824,
-                62015503875968992,
-                57851239669421408,
-                57017543859649192,
-                51162790697674264,
-                49019607843137304,
-                51546391752577360,
-                43478260869565192,
-                45454545454545528,
-                41666666666666632,
-                37267080745341576,
-                38709677419354824,
-                40268456375838872,
-                34965034965035004,
-                36231884057971064,
-                30075187969924812,
-                31007751937984440,
-                32000000000000028,
-                33057851239669312,
-                25641025641025660,
-                35087719298245724,
-                27272727272727228,
-                28037383177570096,
-                19230769230769164,
-                29411764705882360,
-                20202020202020220
-            ][_index];
     }
 }
