@@ -35,7 +35,7 @@ abstract contract Liquidity is ValueHolder, Ownable {
     uint256 private _totalShares;
 
     uint256 private _availableLiquidity;
-    uint256 internal _maxExposureNumerator;
+    uint256 private _maxExposureNumerator;
 
     // #######################################################################################
 
@@ -103,6 +103,10 @@ abstract contract Liquidity is ValueHolder, Ownable {
 
     // #######################################################################################
 
+    function _getRoundLiquidity() internal view returns (uint256) {
+        return _availableLiquidity;
+    }
+
     function _clearLiquidityQueue() internal {
         uint256 _balance = _getBalance() - _stagedBalance;
         _stagedBalance = 0;
@@ -147,7 +151,7 @@ abstract contract Liquidity is ValueHolder, Ownable {
 
     // #######################################################################################
 
-    function _queueLiquidityChange(uint8 _action, uint256 _amount) internal {
+    function _queueLiquidityChange(uint8 _action, uint256 _amount) private {
         _liquidityQueue.push(LiquidityDelta(_action, msg.sender, _amount));
         emit LiquidityChangeQueued(_action, msg.sender, _amount);
     }
