@@ -1,1298 +1,1183 @@
 import { loadFixture, mine } from "@nomicfoundation/hardhat-toolbox/network-helpers";
 import { expect } from "chai";
 import { ethers } from "hardhat";
+import { LootTable } from "../typechain-types";
 
+const initialBalance = ethers.parseEther("1000");
 const oneEther = ethers.parseEther("1");
-const initialBalance = ethers.parseEther("100");
 
-const knownRandoms = [
-    "0x283b8dccf28774e4a044d565a03369ff0c07898f65ae91230915f2ba1437981d",
-    "0xeaf524133e8d9a0f1a969c83af27fb013166dfc8c9e66392e0f2f83a9b635e51",
-    "0x96a8a21bcd09432f88ad64788fc68b8db463e5a9f2d6a8a3ee754449c55c91c9",
-    "0x4b1dc1dd9db96919105a6ce350ddab528b8e84db161cbd03044123f16bb20147",
-    "0x53f1f5ab12de6c1ad3106d99e253e3e5308ab8ab880fb3ec4bc216a4129f596b",
-    "0xe9c8038c3fb6e756f3482d07a25cffd382371b9e2d876ebe8047b83f6f1311a7",
-    "0xbb9daeafd51606c745a53d003f5569b049b90e045b69994194ab9b97491ca553",
-    "0x11865b4f8fb6aedf6d515f0cef844a6ed6305599ddbca02bc845add62a3662f9",
-    "0xc3ea3bb417eab918590f50d0c1c28637a6925c1ab097ae6e4c2136888090b50c",
-    "0x031331d4d1ecc343cbd321e273a813edd486286619837ce9e405efe73e1137bc",
-    "0xac7a1c7e2c8d7badb1bbfa5e93b4f53c5b35a116fa81e3690015338c14e5e6d0",
-    "0x985d72f78b3e79c3ff7ab1a858b64c6f71cd29f3dfc61cc07edd29eb1f57dff6",
-    "0x47d44da38a5ca7cc7d93e3039d36baaec3de5750bd9239c9cfe1bbdbfb925db6",
-    "0x8bd1a84c6c1219d92929c1d7e74a1a7e1911ff4d730c54796f2dafbc8878168f",
-    "0xf7d013a07e8ad65d4961d4eaa7cf48c83d81db998cceefa11fd4efa8f8ac2b04",
-    "0x7fa8ab17cfa10836fbc8d52417e6e2b9ca41faa55e4798b3fa681ed465ee0fba",
-    "0xed20edecf4b0168c24bcd84e00417dad5c950f85a4ff73ad070cc21396c9227e",
-    "0xde208f54438603e6853d5e78e896d001682b0a287f57e7256ecfb340cc49499f",
-    "0xefdd05aeb0b4c285499c6022168b7c68607456a5069eced86ae7cf5ef1b713ed",
-    "0x763e7e48c39bf05e6bcd6338a3ca650546a7ef23f7a245fde75482a08fa9ab90",
-    "0x461bc1dd2f94c4a3fd832653f088212b85a12e95ac8420e6d289e1264bad5731",
-    "0x1a6e08a9d27692e88b20c391621bcb1fab8a432143a41c221cc03ae31fc6e568",
-    "0x2f2473b554f9897ae1bb4c7be2c0db6c8cd1ec232df3ad19fbd6883039c670e0",
-    "0x8312e2a60bbae1c7b0e2dbb22de3108c3365647cd278618a0b798d3db6453040",
-    "0x97c78cf56002d6cefe3a404f09a51384bc8bc069e1ad633416f8a3685f3b801d",
-    "0x300f927202a376b4015f335f61a7f804d73f469d757789b416e8c908e466d346",
-    "0x63f01b566b136ad4c0807b31bfee9548c67ba591f4206d174fe78390fe1d90ef",
-    "0x7f424af7b21e77eee730939d951a516922bbe3a23a31c349526eaf4c4fae5c77",
-    "0x0c3b7a91d1701901f4758d8df235a0327e4022c9144a5e1b2684143ef8c31724",
-    "0x4847355acd881baa66e08c8f36326cfcb8935dd867b7a54fce93f25bc8df1b6f",
-    "0x8f139e7a06aac85dbf7542172846a82999cba85ab318e8e09e686a2fec6095e0",
-    "0x4cd5a71c71186a340d9c2f1cdc9fa59777c9987e5a04d6a51a3726308f8ca626",
-    "0xa7f4e50208fd712d885270a36e1a75f1626b5770c24e67be3f55352821af4e6e",
-    "0x39dcb8521f994e069b501a479b32864146be6ba1ae39d80beef720f2ecab4830",
-    "0x3117e2f82af4c1e805d700881720032d385e47226c2173e04ac9dffd2ba941db",
-    "0x59041a1806ca4cdb7d2d7d590d34b677b2dbd54ad6cf1e9fc98415d47eefdde2",
-    "0xb054c9f06e2a2ac7509d297320bafaea87153fe014e55c726ec4b3942f6eeddd",
-    "0x70fc827e96d00dea2136214bc3762b63d23a7cd45c4f35be6a16c8075021a546",
-    "0x1aa0a79eaf6ab3a8a9cda608428e01b9d41fbb91698e9b5d0cb9cca9b24dac3d",
-    "0x5c4f38c1888836188f85094cf568f0eb4ed155fd6c932e32bbf9ce0e4900349e",
-    "0x59bed028b906b8aa43bd1678de655e9dc72530ce15dad34d834e24fe7a3a22ac",
-    "0x4e50bd088322fdf3a69bd564d6c40b87de29e3225481cbbd1ec91ecd57971f1a",
-    "0x44779e756b687acfcaa46310a281054d508385ba5cc02898adcf8dd5c1fe774e",
-    "0x127d2ed5a6f61e9b247c0bb80db1319bf2284e0ee3f91147de2d20284d3ceda1",
-    "0xb8d6244764dae4fef11390554eadc94ce95fb229882ef24ee6cf5bef96199b43",
-    "0x54beae8cd25221ee29c227b094256b19fb8f76892fd4780badaee631a07ff6df",
-    "0x1840470562d84e3b072cef7162f3f76807e74c24b73286d97629e5adb8cc3d3e",
-    "0x3306e52a1cc9138008f3052d26c4008d7df1e32e463ed4c148d3f938a1bb140a",
-    "0xb660016ae02df58327d581305fb8c59a763381148817dccbd038ca4a1bcb22fc",
-    "0x3ba538d72ae8fb75e45683696e03a85d10b73ff70746fa10703b0b9762a28ee3",
-];
+function getHash(salt: string) {
+    return ethers.keccak256(ethers.solidityPacked(["bytes32"], [salt]));
+}
+
+// Gets the dead index given the entire game has played out, don't use this in production
+async function getDeadIndex(lootTable: LootTable, salt: string, blockHashes: string[]) {
+    const length = Number(await lootTable.getLength());
+
+    expect(blockHashes.length).to.equal(length);
+
+    let deadIndex = blockHashes.length;
+    for (let i = 0; i < blockHashes.length; i++) {
+        const rng = ethers.keccak256(ethers.solidityPacked(["bytes32", "bytes32"], [salt, blockHashes[i]]));
+
+        if (await lootTable.isDead(rng, i)) {
+            deadIndex = i;
+            break;
+        }
+    }
+
+    return deadIndex;
+}
 
 describe("HashCrash", function () {
     async function baseFixture() {
-        const [deployer, alice, bob, charlie] = await ethers.getSigners();
+        const [deployer, alice, bob, charlie, dave] = await ethers.getSigners();
 
-        const GRIND = await ethers.getContractFactory("Grind");
-        const grind = await GRIND.deploy();
-        await grind.waitForDeployment();
+        const genesisSalt = ethers.hexlify(ethers.randomBytes(32));
+
+        const TOKEN = await ethers.getContractFactory("MockERC20");
+        const token = await TOKEN.deploy();
+        await token.waitForDeployment();
+
+        const LINEAR10x = await ethers.getContractFactory("Linear10x");
+        const lootTable = await LINEAR10x.deploy();
+        await lootTable.waitForDeployment();
 
         const HASHCRASH = await ethers.getContractFactory("HashCrashHarness");
-        const sut = await HASHCRASH.deploy(grind.target);
-
-        for (const wallet of [alice, bob, charlie]) {
-            await grind.connect(wallet).mint();
-        }
+        const sut = await HASHCRASH.deploy(
+            lootTable.target,
+            getHash(genesisSalt),
+            deployer.address,
+            deployer.address,
+            token.target
+        );
+        await sut.waitForDeployment();
 
         return {
             sut,
-            grind,
+            token,
+            lootTable,
             wallets: {
                 deployer,
                 alice,
                 bob,
                 charlie,
+                dave,
+            },
+            config: {
+                genesisSalt,
+                genesisHash: getHash(genesisSalt),
+                hashProducer: deployer.address,
+                owner: deployer.address,
+                introBlocks: 20,
+                liquidityPerRound: (total: bigint) => (total * 1000n) / 10000n,
             },
         };
     }
 
+    async function activeFixture() {
+        const { sut, lootTable, token, wallets, config } = await baseFixture();
+
+        await sut.setActive(true);
+
+        return { sut, lootTable, token, wallets, config };
+    }
+
+    async function tokenBalanceFixture() {
+        const { sut, lootTable, token, wallets, config } = await activeFixture();
+
+        // Mint some tokens to the wallets
+        await token.mint(wallets.deployer.address, initialBalance);
+        await token.mint(wallets.alice.address, initialBalance);
+        await token.mint(wallets.bob.address, initialBalance);
+        await token.mint(wallets.charlie.address, initialBalance);
+        await token.mint(wallets.dave.address, initialBalance);
+
+        // Approve the contract to spend tokens on behalf of the wallets
+        await token.connect(wallets.deployer).approve(sut.target, initialBalance);
+        await token.connect(wallets.alice).approve(sut.target, initialBalance);
+        await token.connect(wallets.bob).approve(sut.target, initialBalance);
+        await token.connect(wallets.charlie).approve(sut.target, initialBalance);
+        await token.connect(wallets.dave).approve(sut.target, initialBalance);
+
+        return { sut, lootTable, token, wallets, config };
+    }
+
     async function liquidFixture() {
-        const fixture = await baseFixture();
-        const { sut, grind, wallets } = fixture;
+        const { sut, lootTable, token, wallets, config } = await tokenBalanceFixture();
 
-        await grind.connect(wallets.alice).approve(sut.target, initialBalance);
-        await grind.connect(wallets.bob).approve(sut.target, initialBalance);
-        await grind.connect(wallets.charlie).approve(sut.target, initialBalance);
+        // Deposit some tokens into the contract
+        await sut.deposit(initialBalance);
 
-        await grind.approve(sut.target, initialBalance);
-        await sut.queueLiquidityChange(0, initialBalance);
+        // Restore the token balance for the deployer
+        await token.mint(wallets.deployer.address, initialBalance);
+        await token.approve(sut.target, initialBalance);
 
-        await sut.reset();
-
-        return fixture;
+        return { sut, lootTable, token, wallets, config };
     }
 
-    async function knownGameFixture() {
-        const fixture = await liquidFixture();
-        const { sut } = fixture;
+    async function predictableDeathTable() {
+        const { sut, token, wallets, config } = await liquidFixture();
 
-        const offset = await sut.ROUND_BUFFER();
+        const LootTable = await ethers.getContractFactory("PredictableDeathTable");
+        const lootTable = await LootTable.deploy();
+        await lootTable.waitForDeployment();
 
-        const block = await ethers.provider.getBlock("latest");
-        if (!block) throw new Error("Block not found");
+        await sut.setLootTable(lootTable.target);
 
-        const mocks = knownRandoms.map((x, i) => {
-            return {
-                blockNumber: BigInt(block.number + i) + offset,
-                randomNumber: BigInt(x),
-            };
-        });
+        const bets = [
+            { wallet: wallets.deployer, amount: oneEther, cashoutIndex: 0 },
+            { wallet: wallets.alice, amount: oneEther, cashoutIndex: 1 },
+            { wallet: wallets.bob, amount: oneEther, cashoutIndex: 2 },
+            { wallet: wallets.charlie, amount: oneEther, cashoutIndex: 3 },
+            { wallet: wallets.dave, amount: oneEther, cashoutIndex: 4 },
+        ];
 
-        await sut.setMockRandom(mocks);
+        for (const bet of bets) {
+            await sut.connect(bet.wallet).placeBet(bet.amount, bet.cashoutIndex);
+        }
 
-        return fixture;
+        return { sut, lootTable, token, wallets, config: { ...config, bets, introBlocks: config.introBlocks - 5 } };
     }
 
-    async function maxGameFixture() {
-        const fixture = await liquidFixture();
-        const { sut } = fixture;
+    async function noDeathTable() {
+        const { sut, token, wallets, config } = await liquidFixture();
 
-        const offset = await sut.ROUND_BUFFER();
+        const LootTable = await ethers.getContractFactory("NoDeathTable");
+        const lootTable = await LootTable.deploy();
+        await lootTable.waitForDeployment();
 
-        const block = await ethers.provider.getBlock("latest");
-        if (!block) throw new Error("Block not found");
+        await sut.setLootTable(lootTable.target);
 
-        const mocks = Array.from({ length: 100 }, (_, i) => {
-            return {
-                blockNumber: BigInt(block.number + i) + offset,
-                randomNumber: ethers.parseEther("1.999"),
-            };
-        });
+        const bets = [
+            { wallet: wallets.deployer, amount: oneEther, cashoutIndex: 0 },
+            { wallet: wallets.alice, amount: oneEther, cashoutIndex: 1 },
+            { wallet: wallets.bob, amount: oneEther, cashoutIndex: 2 },
+            { wallet: wallets.charlie, amount: oneEther, cashoutIndex: 3 },
+            { wallet: wallets.dave, amount: oneEther, cashoutIndex: 4 },
+        ];
 
-        await sut.setMockRandom(mocks);
+        for (const bet of bets) {
+            await sut.connect(bet.wallet).placeBet(bet.amount, bet.cashoutIndex);
+        }
 
-        return fixture;
+        return { sut, lootTable, token, wallets, config: { ...config, bets, introBlocks: config.introBlocks - 5 } };
+    }
+
+    async function betFixture() {
+        const { sut, lootTable, token, wallets, config } = await liquidFixture();
+
+        const bets = [
+            { wallet: wallets.deployer, amount: oneEther, cashoutIndex: 10 },
+            { wallet: wallets.alice, amount: oneEther * 2n, cashoutIndex: 9 },
+            { wallet: wallets.bob, amount: oneEther * 3n, cashoutIndex: 8 },
+            { wallet: wallets.charlie, amount: oneEther * 4n, cashoutIndex: 7 },
+        ];
+
+        for (const bet of bets) {
+            await sut.connect(bet.wallet).placeBet(bet.amount, bet.cashoutIndex);
+        }
+
+        return { sut, lootTable, token, wallets, config: { ...config, bets, introBlocks: config.introBlocks - 4 } };
+    }
+
+    async function completedBetFixture() {
+        const { sut, lootTable, token, wallets, config } = await betFixture();
+
+        const length = Number(await lootTable.getLength());
+        await mine(config.introBlocks + length + 1); // + 1 otherwise cant read that final block hash
+
+        const info = await sut.getRoundInfo();
+        const blockHashes = info[5];
+
+        const deadIndex = await getDeadIndex(lootTable, config.genesisSalt, blockHashes);
+
+        return { sut, lootTable, token, wallets, config: { ...config, deadIndex } };
     }
 
     // ############################ TESTS ############################
 
-    describe("integration", function () {
-        it.skip("Should produce the expected tally", async function () {
-            const { sut, grind } = await loadFixture(baseFixture);
-
-            await grind.approve(sut.target, initialBalance * 2n);
-
-            await sut.queueLiquidityChange(0, initialBalance);
-
-            await sut.reset();
-
-            const multipliers = [
-                500000, 750000, 1000000, 1250000, 1500000, 2000000, 2500000, 3000000, 4000000, 5000000, 6000000,
-                7000000, 9000000, 10000000, 12500000, 15000000, 17500000, 20000000, 22500000, 25000000, 27500000,
-                30000000, 32500000, 35000000, 37500000, 40000000, 42500000, 45000000, 47500000, 50000000, 52500000,
-                55000000, 57500000, 60000000, 62500000, 65000000, 67500000, 70000000, 72500000, 75000000, 77500000,
-                80000000, 82500000, 85000000, 87500000, 90000000, 92500000, 95000000, 97500000, 100000000,
-            ];
-
-            const total = 5000;
-            const tally: Record<number, number> = {};
-
-            for (let i = 0; i < total; i++) {
-                await sut.placeBet(ethers.parseEther("0.01"), 49n);
-
-                await mine(100);
-
-                await sut.reset();
-            }
-
-            const history = await sut.getHistory(total);
-
-            for (const multi of history) {
-                const keyIndex = multipliers.findIndex((x) => x === parseFloat(multi.toString()));
-
-                for (let i = 0; i <= keyIndex; i++) {
-                    tally[multipliers[i]] = (tally[multipliers[i]] || 0) + 1;
-                }
-            }
-
-            let evs: number[] = [];
-
-            for (const entries of Object.entries(tally)) {
-                const [key, value] = entries;
-
-                const multi = parseFloat(key) / 1e6;
-                const ev = (value / total) * multi;
-
-                if (multi >= 1) {
-                    expect(ev).to.be.closeTo(0.97, 0.15);
-                    evs.push(ev);
-                } else {
-                    expect(ev).to.be.lessThan(0.97);
-                }
-
-                console.log("ev", multi, (value / total) * multi);
-            }
-
-            const avg = evs.reduce((a, b) => a + b, 0) / evs.length;
-            console.log("average ev", avg);
-
-            expect(avg).to.be.lessThan(1).greaterThan(0.9);
-        });
-
-        it("Plays as expected", async function () {
-            const { sut, wallets, grind } = await loadFixture(knownGameFixture);
-
-            await sut.connect(wallets.alice).placeBet(oneEther, 10); // winner (6x)
-            await sut.connect(wallets.bob).placeBet(oneEther, 11); // dead on
-            await sut.connect(wallets.charlie).placeBet(oneEther, 12); // dead after
-
-            await mine(100);
-
-            const round = await sut.getRoundInfo();
-
-            expect(round.sb).to.equal(33n);
-            expect(round.eb).to.equal(44n);
-            expect(round.lq).to.equal(
-                (initialBalance * 40n) / 100n -
-                    (oneEther * 6000000n) / 1000000n -
-                    (oneEther * 7000000n) / 1000000n -
-                    (oneEther * 9000000n) / 1000000n
-            );
-
-            await sut.reset();
-
-            const history = await sut.getHistory(1);
-
-            expect(history[0]).to.equal(6000000n);
-            expect(await grind.balanceOf(wallets.alice.address)).to.equal(initialBalance - oneEther + 6n * oneEther);
-            expect(await grind.balanceOf(wallets.bob.address)).to.equal(initialBalance - oneEther);
-            expect(await grind.balanceOf(wallets.charlie.address)).to.equal(initialBalance - oneEther);
-            expect(await grind.balanceOf(sut.target)).to.equal(initialBalance + oneEther * 3n - oneEther * 6n);
-        });
-    });
-
     describe("constructor", function () {
-        it("Should set the grind address", async function () {
-            const { sut, grind } = await loadFixture(baseFixture);
+        it("Should set the owner address", async function () {
+            const { sut, config } = await loadFixture(baseFixture);
 
-            expect(await sut.GRIND()).to.equal(await grind.getAddress());
+            expect(await sut.owner()).to.equal(config.owner);
+        });
+
+        it("Should set active to false", async function () {
+            const { sut } = await loadFixture(baseFixture);
+
+            expect(await sut.getActive()).to.equal(false);
+        });
+
+        it("Should set the intro blocks to 20", async function () {
+            const { sut, config } = await loadFixture(baseFixture);
+
+            expect(await sut.getIntroBlocks()).to.equal(config.introBlocks);
+        });
+
+        it("Should set the genesis hash", async function () {
+            const { sut, config } = await loadFixture(baseFixture);
+
+            const roundInfo = await sut.getRoundInfo();
+            expect(roundInfo[3]).to.equal(config.genesisHash);
+        });
+
+        it("Should set the hash producer", async function () {
+            const { sut, config } = await loadFixture(baseFixture);
+
+            expect(await sut.getHashProducer()).to.equal(config.hashProducer);
+        });
+
+        it("Should set the loot table", async function () {
+            const { sut, lootTable } = await loadFixture(baseFixture);
+
+            expect(await sut.getLootTable()).to.equal(lootTable.target);
+        });
+
+        it("Should emit LootTableUpdated", async function () {
+            const { token, lootTable, config } = await loadFixture(baseFixture);
+
+            const HASHCRASH = await ethers.getContractFactory("HashCrashHarness");
+            expect(
+                await HASHCRASH.deploy(
+                    lootTable.target,
+                    config.genesisHash,
+                    config.hashProducer,
+                    config.owner,
+                    token.target
+                )
+            )
+                .to.emit(lootTable, "LootTableUpdated")
+                .withArgs(lootTable.target);
         });
     });
 
-    describe("getHistory", function () {
-        it("Should return an empty array by default", async function () {
+    describe("getActive", function () {
+        it("Should return false by default", async function () {
             const { sut } = await loadFixture(baseFixture);
 
-            const history = await sut.getHistory(0);
-            expect(history).to.be.empty;
+            expect(await sut.getActive()).to.equal(false);
         });
 
-        it("Should decrease the amount to the history length if needed", async function () {
-            const { sut } = await loadFixture(baseFixture);
+        it("Should return the set _active value", async function () {
+            const { sut } = await loadFixture(activeFixture);
 
-            const history = await sut.getHistory(1000);
-            expect(history).to.be.empty;
-        });
-
-        it("Should return the history", async function () {
-            const { sut, wallets } = await loadFixture(knownGameFixture);
-
-            await sut.connect(wallets.alice).placeBet(oneEther, 10);
-            await sut.connect(wallets.bob).placeBet(oneEther, 11);
-            await sut.connect(wallets.charlie).placeBet(oneEther, 12);
-
-            await mine(100);
-
-            await sut.reset();
-
-            const history = await sut.getHistory(10);
-
-            expect(history.length).to.equal(1);
-            expect(history[0]).to.equal(6000000n);
+            expect(await sut.getActive()).to.equal(true);
         });
     });
 
-    describe("getBets", function () {
-        it("Should return an empty array by default", async function () {
+    describe("getLootTable", function () {
+        it("Should return the loot table", async function () {
+            const { sut, lootTable } = await loadFixture(baseFixture);
+
+            expect(await sut.getLootTable()).to.equal(lootTable.target);
+        });
+    });
+
+    describe("getStagedLootTable", function () {
+        it("Should return address(0) by default", async function () {
             const { sut } = await loadFixture(baseFixture);
 
-            const bets = await sut.getBets();
-            expect(bets).to.be.empty;
+            expect(await sut.getStagedLootTable()).to.equal(ethers.ZeroAddress);
         });
 
-        it("Should return the bets", async function () {
+        it("Should return the staged loot table", async function () {
             const { sut, wallets } = await loadFixture(liquidFixture);
 
-            await sut.connect(wallets.alice).placeBet(oneEther, 4);
-            await sut.connect(wallets.alice).cancelBet(0);
+            await sut.placeBet(oneEther, 10);
+            await sut.setLootTable(wallets.bob.address);
 
-            await sut.connect(wallets.bob).placeBet(oneEther * 2n, 5);
+            expect(await sut.getStagedLootTable()).to.equal(wallets.bob.address);
+        });
+    });
 
-            const bets = await sut.getBets();
-            
-            expect(bets.length).to.equal(2);
+    describe("getHashProducer", function () {
+        it("Should return the hash producer", async function () {
+            const { sut, config } = await loadFixture(baseFixture);
 
-            expect(bets[0].user).to.equal(wallets.alice.address);
-            expect(bets[0].amount).to.equal(oneEther);
-            expect(bets[0].cashoutIndex).to.equal(4n);
-            expect(bets[0].cancelled).to.equal(true);
+            expect(await sut.getHashProducer()).to.equal(config.hashProducer);
+        });
+    });
 
-            expect(bets[1].user).to.equal(wallets.bob.address);
-            expect(bets[1].amount).to.equal(oneEther * 2n);
-            expect(bets[1].cashoutIndex).to.equal(5n);
-            expect(bets[1].cancelled).to.equal(false);
+    describe("getIntroBlocks", function () {
+        it("Should return the set intro blocks", async function () {
+            const { sut, config } = await loadFixture(baseFixture);
+
+            expect(await sut.getIntroBlocks()).to.equal(config.introBlocks);
         });
     });
 
     describe("getBetsFor", function () {
         it("Should return an empty array by default", async function () {
-            const { sut, wallets } = await loadFixture(baseFixture);
+            const { sut } = await loadFixture(baseFixture);
 
-            const bets = await sut.getBetsFor(wallets.alice.address);
-            expect(bets).to.be.empty;
+            expect(await sut.getBetsFor(ethers.ZeroAddress)).to.deep.equal([]);
         });
 
-        it("Should return the bets", async function () {
+        it("Should return the bets for the user", async function () {
             const { sut, wallets } = await loadFixture(liquidFixture);
 
-            await sut.connect(wallets.alice).placeBet(oneEther, 4);
-            await sut.connect(wallets.alice).cancelBet(0);
+            const cashoutIndex = 10;
 
-            await sut.connect(wallets.bob).placeBet(oneEther * 2n, 5);
+            await sut.placeBet(oneEther, cashoutIndex);
+            await sut.connect(wallets.alice).placeBet(oneEther, cashoutIndex);
 
-            const alice = await sut.getBetsFor(wallets.alice.address);
-            
-            expect(alice.length).to.equal(1);
-            expect(alice[0].user).to.equal(wallets.alice.address);
-            expect(alice[0].amount).to.equal(oneEther);
-            expect(alice[0].cashoutIndex).to.equal(4n);
-            expect(alice[0].cancelled).to.equal(true);
-            
-            const bob = await sut.getBetsFor(wallets.bob.address);
-            expect(bob.length).to.equal(1);
-            expect(bob[0].user).to.equal(wallets.bob.address);
-            expect(bob[0].amount).to.equal(oneEther * 2n);
-            expect(bob[0].cashoutIndex).to.equal(5n);
-            expect(bob[0].cancelled).to.equal(false);
+            const bets = await sut.getBetsFor(wallets.deployer.address);
+            expect(bets.length).to.equal(1);
+
+            expect(bets[0].user).to.equal(wallets.deployer.address);
+            expect(bets[0].amount).to.equal(oneEther);
+            expect(bets[0].cashoutIndex).to.equal(cashoutIndex);
+            expect(bets[0].cancelled).to.equal(false);
         });
     });
 
     describe("getRoundInfo", function () {
-        it("Should return 0 for all by default", async function () {
-            const { sut } = await loadFixture(baseFixture);
+        describe("startBlock_", function () {
+            it("Should return the start block at 0", async function () {
+                const { sut } = await loadFixture(baseFixture);
 
-            const round = await sut.getRoundInfo();
-            expect(round.sb).to.equal(0n);
-            expect(round.eb).to.equal(0n);
-            expect(round.lq).to.equal(0n);
+                const roundInfo = await sut.getRoundInfo();
+                expect(roundInfo[1]).to.equal(0);
+            });
+
+            it("Should return the start block when set", async function () {
+                const { sut, config } = await loadFixture(liquidFixture);
+
+                await sut.placeBet(oneEther, 10);
+
+                const currentBlock = await ethers.provider.getBlockNumber();
+                const roundInfo = await sut.getRoundInfo();
+
+                expect(roundInfo[1]).to.equal(currentBlock + config.introBlocks);
+            });
         });
 
-        it("Should return the start block, end block and remaining lq", async function () {
-            const { sut, wallets } = await loadFixture(knownGameFixture);
+        describe("roundLiquidity_", function () {
+            it("Should return the round liquidity when zero", async function () {
+                const { sut } = await loadFixture(baseFixture);
 
-            await sut.connect(wallets.alice).placeBet(oneEther, 10);
-            await mine(100);
+                const roundInfo = await sut.getRoundInfo();
+                expect(roundInfo[1]).to.equal(0);
+            });
 
-            const round = await sut.getRoundInfo();
-            expect(round.sb).to.equal(33n);
-            expect(round.eb).to.equal(44n);
-            expect(round.lq).to.equal((initialBalance * 40n) / 100n - (oneEther * 6000000n) / 1000000n);
+            it("Should return the round liquidity when set", async function () {
+                const { sut, config } = await loadFixture(tokenBalanceFixture);
+
+                await sut.deposit(oneEther);
+
+                const roundInfo = await sut.getRoundInfo();
+                expect(roundInfo[2]).to.equal(config.liquidityPerRound(oneEther));
+            });
+        });
+
+        describe("hash_", function () {
+            it("Should return the round hash", async function () {
+                const { sut, config } = await loadFixture(baseFixture);
+
+                const roundInfo = await sut.getRoundInfo();
+                expect(roundInfo[3]).to.equal(config.genesisHash);
+            });
+        });
+
+        describe("bets_", function () {
+            it("Should return an empty array by default", async function () {
+                const { sut } = await loadFixture(baseFixture);
+
+                const roundInfo = await sut.getRoundInfo();
+                expect(roundInfo[4]).to.deep.equal([]);
+            });
+
+            it("Should return the bets", async function () {
+                const { sut, wallets } = await loadFixture(liquidFixture);
+
+                const cashoutIndex = 10;
+
+                await sut.placeBet(oneEther, cashoutIndex);
+
+                const roundInfo = await sut.getRoundInfo();
+                const bets = roundInfo[4];
+                expect(bets.length).to.equal(1);
+
+                expect(bets[0].user).to.equal(wallets.deployer.address);
+                expect(bets[0].amount).to.equal(oneEther);
+                expect(bets[0].cashoutIndex).to.equal(cashoutIndex);
+                expect(bets[0].cancelled).to.equal(false);
+            });
+        });
+
+        describe("blockHashes_", function () {
+            it("Should return no block hashes when the round is idle", async function () {
+                const { sut } = await loadFixture(baseFixture);
+
+                const roundInfo = await sut.getRoundInfo();
+                expect(roundInfo[5]).to.deep.equal([]);
+            });
+
+            it("Should return no block hashes before the start block", async function () {
+                const { sut } = await loadFixture(liquidFixture);
+
+                await sut.placeBet(oneEther, 10);
+
+                const roundInfo = await sut.getRoundInfo();
+                expect(roundInfo[5]).to.deep.equal([]);
+            });
+
+            it("Should return no block hashes on the start block", async function () {
+                const { sut, config } = await loadFixture(liquidFixture);
+
+                await sut.placeBet(oneEther, 10);
+
+                await mine(config.introBlocks);
+
+                const roundInfo = await sut.getRoundInfo();
+
+                expect(await ethers.provider.getBlockNumber()).to.equal(roundInfo[1]);
+                expect(roundInfo[5]).to.deep.equal([]);
+            });
+
+            it("Should return all block hashes between the start block (inc) and current block (exc)", async function () {
+                const { sut, config } = await loadFixture(liquidFixture);
+
+                const amount = 5;
+
+                await sut.placeBet(oneEther, 10);
+
+                await mine(config.introBlocks);
+
+                const startBlock = await ethers.provider.getBlockNumber();
+
+                await mine(amount);
+
+                const roundInfo = await sut.getRoundInfo();
+                expect(roundInfo[5].length).to.equal(amount);
+                for (let i = 0; i < amount; i++) {
+                    expect(roundInfo[5][i]).to.equal(
+                        await ethers.provider.getBlock(startBlock + i).then((b) => b!.hash)
+                    );
+                }
+            });
         });
     });
 
-    describe("getTotalShares", function () {
-        it("Should return 0 by default", async function () {
-            const { sut } = await loadFixture(baseFixture);
-
-            expect(await sut.getTotalShares()).to.equal(0n);
-        });
-
-        it("Should return the total number of shares", async function () {
-            const { sut } = await loadFixture(liquidFixture);
-
-            expect(await sut.getTotalShares()).to.equal(initialBalance);
-        });
-    });
-
-    describe("getShares", function () {
-        it("Should return 0 by default", async function () {
+    describe("setActive", function () {
+        it("Should revert if the caller is not the owner", async function () {
             const { sut, wallets } = await loadFixture(baseFixture);
 
-            expect(await sut.getShares(wallets.deployer.address)).to.equal(0n);
+            await expect(sut.connect(wallets.alice).setActive(true)).to.be.revertedWithCustomError(
+                sut,
+                "OwnableUnauthorizedAccount"
+            );
         });
 
-        it("Should return the number of shares a user has", async function () {
+        it("Should do nothing when the same value is passed", async function () {
+            const { sut } = await loadFixture(baseFixture);
+
+            expect(await sut.getActive()).to.equal(false);
+            await sut.setActive(false);
+            expect(await sut.getActive()).to.equal(false);
+        });
+
+        it("Should set active", async function () {
+            const { sut } = await loadFixture(baseFixture);
+
+            await sut.setActive(true);
+
+            expect(await sut.getActive()).to.equal(true);
+        });
+
+        it("Should emit ActiveUpdated", async function () {
+            const { sut } = await loadFixture(baseFixture);
+
+            await expect(sut.setActive(true)).to.emit(sut, "ActiveUpdated").withArgs(true);
+        });
+    });
+
+    describe("setHashProducer", function () {
+        it("Should revert if the caller is not the owner", async function () {
+            const { sut, wallets } = await loadFixture(baseFixture);
+
+            await expect(sut.connect(wallets.alice).setHashProducer(wallets.bob.address)).to.be.revertedWithCustomError(
+                sut,
+                "OwnableUnauthorizedAccount"
+            );
+        });
+
+        it("Should set the hash producer", async function () {
+            const { sut, wallets } = await loadFixture(baseFixture);
+
+            await sut.setHashProducer(wallets.bob.address);
+
+            expect(await sut.getHashProducer()).to.equal(wallets.bob.address);
+        });
+    });
+
+    describe("setIntroBlocks", function () {
+        it("Should revert if the caller is not the owner", async function () {
+            const { sut, wallets } = await loadFixture(baseFixture);
+
+            await expect(sut.connect(wallets.alice).setIntroBlocks(10)).to.be.revertedWithCustomError(
+                sut,
+                "OwnableUnauthorizedAccount"
+            );
+        });
+
+        it("Should set the intro blocks", async function () {
+            const { sut } = await loadFixture(baseFixture);
+
+            await sut.setIntroBlocks(10);
+
+            expect(await sut.getIntroBlocks()).to.equal(10);
+        });
+    });
+
+    describe("setLootTable", function () {
+        it("Should revert if the caller is not the owner", async function () {
+            const { sut, wallets } = await loadFixture(baseFixture);
+
+            await expect(sut.connect(wallets.alice).setLootTable(wallets.bob.address)).to.be.revertedWithCustomError(
+                sut,
+                "OwnableUnauthorizedAccount"
+            );
+        });
+
+        it("Should set the loot table address", async function () {
+            const { sut } = await loadFixture(baseFixture);
+
+            await sut.setLootTable(ethers.ZeroAddress);
+
+            expect(await sut.getLootTable()).to.equal(ethers.ZeroAddress);
+        });
+
+        it("Should stage the loot table when not idle", async function () {
             const { sut, wallets } = await loadFixture(liquidFixture);
 
-            expect(await sut.getShares(wallets.deployer.address)).to.equal(initialBalance);
-        });
-    });
+            await sut.placeBet(oneEther, 10);
 
-    describe("getLiquidityQueue", function () {
-        it("Should return an empty array by default", async function () {
-            const { sut } = await loadFixture(baseFixture);
+            await sut.setLootTable(wallets.bob.address);
 
-            const queue = await sut.getLiquidityQueue();
-            expect(queue).to.be.empty;
-        });
-
-        it("Should return the queue", async function () {
-            const { sut, wallets } = await loadFixture(baseFixture);
-
-            await sut.connect(wallets.alice).queueLiquidityChange(0, oneEther);
-            await sut.connect(wallets.bob).queueLiquidityChange(1, oneEther * 2n);
-            await sut.connect(wallets.charlie).queueLiquidityChange(0, oneEther * 3n);
-
-            const queue = await sut.getLiquidityQueue();
-            expect(queue.length).to.equal(3);
-            expect(queue).to.deep.equal([
-                [0, wallets.alice.address, oneEther],
-                [1, wallets.bob.address, oneEther * 2n],
-                [0, wallets.charlie.address, oneEther * 3n],
-            ]);
+            expect(await sut.getLootTable()).to.not.equal(wallets.bob.address);
+            expect(await sut.getStagedLootTable()).to.equal(wallets.bob.address);
         });
     });
 
     describe("placeBet", function () {
-        it("Should revert if the amount is 0", async function () {
+        it("Should revert if the amount is zero", async function () {
             const { sut } = await loadFixture(liquidFixture);
 
-            await expect(sut.placeBet(0, 0)).to.be.revertedWithCustomError(sut, "ZeroAmountError");
+            await expect(sut.placeBet(0, 10)).to.be.revertedWithCustomError(sut, "InvalidValue");
         });
 
-        it("Should start the game if _roundStartBlock is 0", async function () {
-            const { sut, wallets } = await loadFixture(liquidFixture);
+        describe("_initialiseRound", function () {
+            it("Should revert if active is not set", async function () {
+                const { sut } = await loadFixture(liquidFixture);
 
-            const block = await ethers.provider.getBlock("latest");
-            const offset = await sut.ROUND_BUFFER();
+                await sut.setActive(false);
 
-            await sut.connect(wallets.alice).placeBet(oneEther, 4);
+                await expect(sut.placeBet(oneEther, 10)).to.be.revertedWithCustomError(sut, "NotActiveError");
+            });
 
-            const game = await sut.getRoundInfo();
+            describe("has staged loot table", function () {
+                async function stagedLootTableFixture() {
+                    const { sut, lootTable, token, wallets, config } = await loadFixture(liquidFixture);
 
-            expect(game.sb).to.equal(BigInt(block!.number) + offset + 1n);
+                    const LINEAR100x = await ethers.getContractFactory("Linear100x");
+                    const stagedLootTable = await LINEAR100x.deploy();
+                    await stagedLootTable.waitForDeployment();
+
+                    await sut.placeBet(oneEther, 10);
+                    await sut.setLootTable(stagedLootTable.target);
+
+                    await mine(config.introBlocks + Number(await lootTable.getLength()));
+
+                    await sut.reveal(config.genesisSalt, config.genesisHash);
+
+                    expect(await sut.getStagedLootTable()).to.equal(stagedLootTable.target);
+
+                    return {
+                        sut,
+                        lootTable,
+                        token,
+                        wallets,
+                        config: {
+                            ...config,
+                            stagedLootTable,
+                        },
+                    };
+                }
+
+                it("Should update the loot table", async function () {
+                    const { sut, config } = await loadFixture(stagedLootTableFixture);
+
+                    await sut.placeBet(oneEther, 10);
+
+                    expect(await sut.getLootTable()).to.equal(config.stagedLootTable.target);
+                });
+
+                it("Should emit LootTableUpdated", async function () {
+                    const { sut, config } = await loadFixture(stagedLootTableFixture);
+
+                    await expect(sut.placeBet(oneEther, 10))
+                        .to.emit(sut, "LootTableUpdated")
+                        .withArgs(config.stagedLootTable.target);
+                });
+
+                it("Should remove the staged loot table", async function () {
+                    const { sut } = await loadFixture(stagedLootTableFixture);
+
+                    await sut.placeBet(oneEther, 10);
+
+                    expect(await sut.getStagedLootTable()).to.equal(ethers.ZeroAddress);
+                });
+            });
+
+            it("Should set the round start block", async function () {
+                const { sut, config } = await loadFixture(liquidFixture);
+
+                await sut.placeBet(oneEther, 10);
+                const currentBlock = await ethers.provider.getBlockNumber();
+
+                const roundInfo = await sut.getRoundInfo();
+                expect(roundInfo[1]).to.equal(currentBlock + config.introBlocks);
+            });
+
+            it("Should emit RoundStarted", async function () {
+                const { sut, config } = await loadFixture(liquidFixture);
+
+                const previous = await ethers.provider.getBlockNumber();
+                const expectedStartBlock = previous + 1 + config.introBlocks; // +1 because event is emitted during the next block
+
+                await expect(sut.placeBet(oneEther, 10))
+                    .to.emit(sut, "RoundStarted")
+                    .withArgs(config.genesisHash, expectedStartBlock, 0);
+            });
         });
 
-        it("Should revert if the autoCashout is above the max allowed limit", async function () {
-            const { sut, wallets } = await loadFixture(liquidFixture);
+        it("Should revert if the round has already started", async function () {
+            const { sut, config } = await loadFixture(liquidFixture);
 
-            const length = await sut.ROUND_LENGTH();
+            await sut.placeBet(oneEther, 10);
 
-            await expect(sut.connect(wallets.alice).placeBet(oneEther, length)).to.be.revertedWithCustomError(
+            await mine(config.introBlocks);
+
+            await expect(sut.placeBet(oneEther, 10)).to.be.revertedWithCustomError(sut, "RoundInProgressError");
+        });
+
+        it("Should revert if the cashout index is outside of the loot table", async function () {
+            const { sut, lootTable } = await loadFixture(liquidFixture);
+
+            const length = await lootTable.getLength();
+
+            await expect(sut.placeBet(oneEther, length + 1n)).to.be.revertedWithCustomError(
                 sut,
-                "InvalidCashoutError"
+                "InvalidCashoutIndexError"
             );
         });
 
-        it("Should revert if the block is the start block", async function () {
-            const { sut, wallets } = await loadFixture(liquidFixture);
+        it("Should escrow the value", async function () {
+            const { sut, token, wallets } = await loadFixture(liquidFixture);
 
-            const offset = await sut.ROUND_BUFFER();
+            const initialBalance = await token.balanceOf(wallets.deployer.address);
+            const initialContractBalance = await token.balanceOf(sut.target);
 
-            await sut.connect(wallets.alice).placeBet(oneEther, 4);
-            await mine(offset - 1n);
+            await sut.placeBet(oneEther, 10);
 
-            const block = await ethers.provider.getBlock("latest");
-            expect(BigInt(block!.number)).to.equal((await sut.getRoundInfo()).sb - 1n);
-
-            await expect(sut.connect(wallets.bob).placeBet(oneEther, 4)).to.be.revertedWithCustomError(
-                sut,
-                "BetsClosedError"
-            );
+            expect(await token.balanceOf(wallets.deployer.address)).to.equal(initialBalance - oneEther);
+            expect(await token.balanceOf(sut.target)).to.equal(initialContractBalance + oneEther);
         });
 
-        it("Should revert if the block is greater than the start block", async function () {
-            const { sut, wallets } = await loadFixture(liquidFixture);
+        it("Should revert if there is insufficient liquidity", async function () {
+            const { sut } = await loadFixture(tokenBalanceFixture);
 
-            const offset = await sut.ROUND_BUFFER();
-
-            await sut.connect(wallets.alice).placeBet(oneEther, 4);
-            await mine(offset);
-
-            const block = await ethers.provider.getBlock("latest");
-            expect(BigInt(block!.number)).to.equal((await sut.getRoundInfo()).sb);
-
-            await expect(sut.connect(wallets.bob).placeBet(oneEther, 4)).to.be.revertedWithCustomError(
-                sut,
-                "BetsClosedError"
-            );
+            await expect(sut.placeBet(oneEther, 10)).to.be.revertedWithCustomError(sut, "InsufficientLiquidity");
         });
 
-        it("Should take hold of the funds", async function () {
-            const { sut, grind, wallets } = await loadFixture(liquidFixture);
+        it("Should reduce the round liquidity", async function () {
+            const { sut, lootTable } = await loadFixture(liquidFixture);
 
-            const sutBefore = await grind.balanceOf(sut.target);
-            const aliceBefore = await grind.balanceOf(wallets.alice.address);
+            const cashout = 10;
 
-            await sut.connect(wallets.alice).placeBet(oneEther, 4);
+            const maxWin = await lootTable.multiply(oneEther, cashout);
 
-            const sutAfter = await grind.balanceOf(sut.target);
-            const aliceAfter = await grind.balanceOf(wallets.alice.address);
+            const initialInfo = await sut.getRoundInfo();
 
-            expect(sutAfter).to.equal(sutBefore + oneEther);
-            expect(aliceAfter).to.equal(aliceBefore - oneEther);
-        });
+            await sut.placeBet(oneEther, cashout);
 
-        it("Should not revert if the max possible win is the round lq", async function () {
-            const { sut, wallets } = await loadFixture(liquidFixture);
+            const roundInfo = await sut.getRoundInfo();
 
-            await expect(sut.connect(wallets.alice).placeBet(oneEther, 25)).to.not.be.revertedWithCustomError(
-                sut,
-                "BetTooLargeError"
-            );
-        });
-
-        it("Should revert if the max possible win is greater than the round lq", async function () {
-            const { sut, wallets } = await loadFixture(liquidFixture);
-
-            await expect(sut.connect(wallets.alice).placeBet(oneEther, 26)).to.be.revertedWithCustomError(
-                sut,
-                "BetTooLargeError"
-            );
-        });
-
-        it("Should decrement the round lq", async function () {
-            const { sut, wallets } = await loadFixture(liquidFixture);
-
-            const before = await sut.getRoundInfo();
-
-            await sut.connect(wallets.alice).placeBet(oneEther, 5); // 2x
-
-            const after = await sut.getRoundInfo();
-
-            expect(after.lq).to.equal(before.lq - oneEther * 2n);
+            expect(roundInfo[2]).to.equal(initialInfo[2] - maxWin);
         });
 
         it("Should store the bet", async function () {
             const { sut, wallets } = await loadFixture(liquidFixture);
 
-            await sut.connect(wallets.alice).placeBet(oneEther, 4);
+            const cashoutIndex = 10;
 
-            const bets = await sut.getBets();
-            const aliceBets = await sut.getBetsFor(wallets.alice.address);
+            await sut.placeBet(oneEther, cashoutIndex);
+
+            const bets = await sut.getBetsFor(wallets.deployer.address);
 
             expect(bets.length).to.equal(1);
-            expect(bets[0].user).to.equal(wallets.alice.address);
+            expect(bets[0].user).to.equal(wallets.deployer.address);
             expect(bets[0].amount).to.equal(oneEther);
-            expect(bets[0].cashoutIndex).to.equal(4n);
+            expect(bets[0].cashoutIndex).to.equal(cashoutIndex);
             expect(bets[0].cancelled).to.equal(false);
+        });
 
-            expect(aliceBets.length).to.equal(1);
-            expect(aliceBets[0].user).to.equal(wallets.alice.address);
-            expect(aliceBets[0].amount).to.equal(oneEther);
-            expect(aliceBets[0].cashoutIndex).to.equal(4n);
-            expect(aliceBets[0].cancelled).to.equal(false);
+        it("Should emit BetPlaced", async function () {
+            const { sut, wallets, config } = await loadFixture(liquidFixture);
+
+            const cashoutIndex = 10;
+
+            await expect(sut.placeBet(oneEther, cashoutIndex))
+                .to.emit(sut, "BetPlaced")
+                .withArgs(config.genesisHash, wallets.deployer.address, oneEther, cashoutIndex);
+        });
+    });
+
+    describe("updateBet", function () {
+        it("Should revert if the index is out of range", async function () {
+            const { sut, config } = await loadFixture(betFixture);
+
+            await expect(sut.updateBet(config.bets.length, 10)).to.be.revertedWithCustomError(sut, "BetNotFoundError");
+        });
+
+        it("Should revert if the caller does not own the bet", async function () {
+            const { sut, wallets } = await loadFixture(betFixture);
+
+            await expect(sut.connect(wallets.charlie).updateBet(0, 10)).to.be.revertedWithCustomError(
+                sut,
+                "BetNotYoursError"
+            );
+        });
+
+        it("Should revert if the bet is cancelled", async function () {
+            const { sut } = await loadFixture(betFixture);
+
+            await sut.cancelBet(0);
+
+            await expect(sut.updateBet(0, 10)).to.be.revertedWithCustomError(sut, "BetCancelledError");
+        });
+
+        it("Should revert if the round is in progress", async function () {
+            const { sut, config } = await loadFixture(betFixture);
+
+            await mine(config.introBlocks);
+
+            await expect(sut.updateBet(0, 10)).to.be.revertedWithCustomError(sut, "RoundInProgressError");
+        });
+
+        it("Should revert if the cashout index is out of range", async function () {
+            const { sut, lootTable } = await loadFixture(betFixture);
+
+            await expect(sut.updateBet(0, (await lootTable.getLength()) + 1n)).to.be.revertedWithCustomError(
+                sut,
+                "InvalidCashoutIndexError"
+            );
+        });
+
+        it("Should use the correct amount of round liquidity", async function () {
+            const { sut, lootTable, config } = await loadFixture(betFixture);
+
+            const initialRoundLiquidity = (await sut.getRoundInfo())[2];
+            const initialLiquidity = await lootTable.multiply(config.bets[0].amount, config.bets[0].cashoutIndex);
+
+            const newCashoutIndex = config.bets[0].cashoutIndex - 1;
+
+            await sut.updateBet(0, newCashoutIndex);
+
+            const newRoundLiquidity = (await sut.getRoundInfo())[2];
+            const newLiquidity = await lootTable.multiply(config.bets[0].amount, newCashoutIndex);
+
+            expect(newRoundLiquidity).to.equal(initialRoundLiquidity + initialLiquidity - newLiquidity);
+        });
+
+        it("Should revert if there is no longer enough liquidity", async function () {
+            const { sut, lootTable } = await loadFixture(betFixture);
+
+            const length = await lootTable.getLength();
+
+            for (let i = 0; i < 8; i++) {
+                await sut.placeBet(oneEther, length - 1n);
+            }
+
+            await expect(sut.updateBet(0, length - 1n)).to.be.revertedWithCustomError(sut, "InsufficientLiquidity");
+        });
+
+        it("Should update the cashout index", async function () {
+            const { sut, wallets, config } = await loadFixture(betFixture);
+
+            const newCashoutIndex = config.bets[0].cashoutIndex - 1;
+            await sut.updateBet(0, newCashoutIndex);
+
+            const bets = await sut.getBetsFor(wallets.deployer.address);
+            expect(bets[0].cashoutIndex).to.equal(newCashoutIndex);
+        });
+
+        it("Should emit BetCashoutUpdated", async function () {
+            const { sut, config } = await loadFixture(betFixture);
+
+            const newCashoutIndex = config.bets[0].cashoutIndex - 1;
+
+            await expect(sut.updateBet(0, newCashoutIndex))
+                .to.emit(sut, "BetCashoutUpdated")
+                .withArgs(config.genesisHash, 0, newCashoutIndex);
         });
     });
 
     describe("cancelBet", function () {
-        it("Should revert if the bet doesnt exist", async function () {
-            const { sut } = await loadFixture(liquidFixture);
+        it("Should revert if the index is out of range", async function () {
+            const { sut, config } = await loadFixture(betFixture);
 
-            await expect(sut.cancelBet(0)).to.be.reverted;
+            await expect(sut.cancelBet(config.bets.length)).to.be.revertedWithCustomError(sut, "BetNotFoundError");
         });
 
-        it("Should revert if the bet isnt yours", async function () {
-            const { sut, wallets } = await loadFixture(liquidFixture);
+        it("Should revert if the caller does not own the bet", async function () {
+            const { sut, wallets } = await loadFixture(betFixture);
 
-            await sut.connect(wallets.alice).placeBet(oneEther, 4);
-
-            await expect(sut.connect(wallets.bob).cancelBet(0)).to.be.revertedWithCustomError(sut, "NotYourBetError");
-        });
-
-        it("Should revert if the bet was cancelled", async function () {
-            const { sut, wallets } = await loadFixture(liquidFixture);
-
-            await sut.connect(wallets.alice).placeBet(oneEther, 4);
-            await sut.connect(wallets.alice).cancelBet(0);
-
-            await expect(sut.connect(wallets.alice).cancelBet(0)).to.be.revertedWithCustomError(sut, "NotYourBetError");
-        });
-
-        it("Should revert on the start block", async function () {
-            const { sut, wallets } = await loadFixture(liquidFixture);
-
-            await sut.connect(wallets.alice).placeBet(oneEther, 4);
-
-            const offset = await sut.ROUND_BUFFER();
-            await mine(offset - 1n);
-
-            const block = await ethers.provider.getBlock("latest");
-            expect(BigInt(block!.number)).to.equal((await sut.getRoundInfo()).sb - 1n);
-
-            await expect(sut.connect(wallets.alice).cancelBet(0)).to.be.revertedWithCustomError(
+            await expect(sut.connect(wallets.charlie).cancelBet(0)).to.be.revertedWithCustomError(
                 sut,
-                "RoundStartedError"
+                "BetNotYoursError"
             );
         });
 
-        it("Should revert after the start block", async function () {
-            const { sut, wallets } = await loadFixture(liquidFixture);
+        it("Should revert if the bet is cancelled", async function () {
+            const { sut } = await loadFixture(betFixture);
 
-            await sut.connect(wallets.alice).placeBet(oneEther, 4);
+            await sut.cancelBet(0);
 
-            const offset = await sut.ROUND_BUFFER();
-            await mine(offset);
+            await expect(sut.cancelBet(0)).to.be.revertedWithCustomError(sut, "BetCancelledError");
+        });
 
-            const block = await ethers.provider.getBlock("latest");
-            expect(BigInt(block!.number)).to.equal((await sut.getRoundInfo()).sb);
+        it("Should revert if the round is in progress", async function () {
+            const { sut, config } = await loadFixture(betFixture);
 
-            await expect(sut.connect(wallets.alice).cancelBet(0)).to.be.revertedWithCustomError(
-                sut,
-                "RoundStartedError"
-            );
+            await mine(config.introBlocks);
+
+            await expect(sut.cancelBet(0)).to.be.revertedWithCustomError(sut, "RoundInProgressError");
         });
 
         it("Should set cancelled to true", async function () {
-            const { sut, wallets } = await loadFixture(liquidFixture);
+            const { sut, wallets } = await loadFixture(betFixture);
 
-            await sut.connect(wallets.alice).placeBet(oneEther, 4n);
-            await sut.connect(wallets.alice).cancelBet(0);
+            const betsBefore = await sut.getBetsFor(wallets.deployer.address);
+            expect(betsBefore[0].cancelled).to.equal(false);
 
-            const bets = await sut.getBetsFor(wallets.alice.address);
+            await sut.cancelBet(0);
 
-            expect(bets[0].cancelled).to.equal(true);
+            const betsAfter = await sut.getBetsFor(wallets.deployer.address);
+            expect(betsAfter[0].cancelled).to.equal(true);
         });
 
-        it("Should return the funds", async function () {
-            const { sut, grind, wallets } = await loadFixture(liquidFixture);
+        it("Should refund the value", async function () {
+            const { sut, token, wallets } = await loadFixture(betFixture);
 
-            const sutBefore = await grind.balanceOf(sut.target);
-            const aliceBefore = await grind.balanceOf(wallets.alice.address);
+            const initialBalance = await token.balanceOf(wallets.deployer.address);
+            const initialContractBalance = await token.balanceOf(sut.target);
 
-            await sut.connect(wallets.alice).placeBet(oneEther, 4n);
-            await sut.connect(wallets.alice).cancelBet(0);
+            await sut.cancelBet(0);
 
-            expect(await grind.balanceOf(sut.target)).to.equal(sutBefore);
-            expect(await grind.balanceOf(wallets.alice.address)).to.equal(aliceBefore);
+            expect(await token.balanceOf(wallets.deployer.address)).to.equal(initialBalance + oneEther);
+            expect(await token.balanceOf(sut.target)).to.equal(initialContractBalance - oneEther);
         });
 
-        it("Should restore the round liquidity", async function () {
-            const { sut, wallets } = await loadFixture(liquidFixture);
+        it("Should release the round liquidity", async function () {
+            const { sut, lootTable, config } = await loadFixture(betFixture);
 
-            const before = await sut.getRoundInfo();
+            const initialRoundLiquidity = (await sut.getRoundInfo())[2];
+            const initialLiquidity = await lootTable.multiply(config.bets[0].amount, config.bets[0].cashoutIndex);
 
-            await sut.connect(wallets.alice).placeBet(oneEther, 4n);
-            await sut.connect(wallets.alice).cancelBet(0);
+            await sut.cancelBet(0);
 
-            const after = await sut.getRoundInfo();
+            const newRoundLiquidity = (await sut.getRoundInfo())[2];
 
-            expect(after.lq).to.equal(before.lq);
+            expect(newRoundLiquidity).to.equal(initialRoundLiquidity + initialLiquidity);
+        });
+
+        it("Should emit BetCancelled", async function () {
+            const { sut, config } = await loadFixture(betFixture);
+
+            await expect(sut.cancelBet(0)).to.emit(sut, "BetCancelled").withArgs(config.genesisHash, 0);
         });
     });
 
-    describe("cashEarly", function () {
-        it("Should revert if the bet doesn't exist", async function () {
-            const { sut } = await loadFixture(knownGameFixture);
+    describe("cashout", function () {
+        it("Should revert if the index is out of range", async function () {
+            const { sut, config } = await loadFixture(betFixture);
 
-            await expect(sut.cashEarly(0)).to.be.reverted;
+            await mine(config.introBlocks);
+
+            await expect(sut.cashout(config.bets.length)).to.be.revertedWithCustomError(sut, "BetNotFoundError");
         });
 
-        it("Should revert if the bet isn't yours", async function () {
-            const { sut, wallets } = await loadFixture(knownGameFixture);
+        it("Should revert if the caller does not own the bet", async function () {
+            const { sut, wallets, config } = await loadFixture(betFixture);
 
-            await sut.connect(wallets.alice).placeBet(oneEther, 4);
+            await mine(config.introBlocks);
 
-            await expect(sut.connect(wallets.bob).cashEarly(0)).to.be.revertedWithCustomError(sut, "NotYourBetError");
-        });
-
-        it("Should revert if the bet was cancelled", async function () {
-            const { sut, wallets } = await loadFixture(knownGameFixture);
-
-            await sut.connect(wallets.alice).placeBet(oneEther, 4);
-            await sut.connect(wallets.alice).cancelBet(0);
-
-            await expect(sut.connect(wallets.alice).cashEarly(0)).to.be.revertedWithCustomError(sut, "NotYourBetError");
-        });
-
-        it("Should revert if the game hasn't started yet", async function () {
-            const { sut, wallets } = await loadFixture(knownGameFixture);
-
-            await sut.connect(wallets.alice).placeBet(oneEther, 4);
-
-            await expect(sut.connect(wallets.alice).cashEarly(0)).to.be.revertedWithCustomError(
+            await expect(sut.connect(wallets.charlie).cashout(0)).to.be.revertedWithCustomError(
                 sut,
-                "RoundNotStartedError"
+                "BetNotYoursError"
             );
         });
 
-        it("Should revert if the block is beyond the users cashout", async function () {
-            const { sut, wallets } = await loadFixture(knownGameFixture);
+        it("Should revert if the bet is cancelled", async function () {
+            const { sut, config } = await loadFixture(betFixture);
 
-            await sut.connect(wallets.alice).placeBet(oneEther, 4);
+            await sut.cancelBet(0);
 
-            await mine(25);
+            await mine(config.introBlocks);
 
-            await expect(sut.connect(wallets.alice).cashEarly(0)).to.be.revertedWithCustomError(sut, "RoundOverError");
+            await expect(sut.cashout(0)).to.be.revertedWithCustomError(sut, "BetCancelledError");
         });
 
-        it("Should revert if the round is over", async function () {
-            const { sut, wallets } = await loadFixture(knownGameFixture);
+        it("Should revert if the round has not started yet", async function () {
+            const { sut } = await loadFixture(betFixture);
 
-            await sut.connect(wallets.alice).placeBet(oneEther, 15);
-
-            await mine(34);
-
-            await expect(sut.connect(wallets.alice).cashEarly(0)).to.be.revertedWithCustomError(sut, "RoundOverError");
+            await expect(sut.cashout(0)).to.be.revertedWithCustomError(sut, "RoundNotStartedError");
         });
 
-        it("Should update the cashoutIndex", async function () {
-            const { sut, wallets } = await loadFixture(knownGameFixture);
+        it("Should revert if the cashout index has already passed", async function () {
+            const { sut, config } = await loadFixture(betFixture);
 
-            const offset = await sut.ROUND_BUFFER();
-            const newIndex = 6n;
+            await mine(config.introBlocks + config.bets[0].cashoutIndex + 1);
 
-            await sut.connect(wallets.alice).placeBet(ethers.parseEther("0.01"), 45);
-
-            await mine(offset + newIndex - 1n);
-
-            await sut.connect(wallets.alice).cashEarly(0);
-
-            const bets = await sut.getBetsFor(wallets.alice.address);
-
-            expect(bets[0].cashoutIndex).to.equal(newIndex);
-        });
-    });
-
-    describe("reset", function () {
-        describe("_resetRound", function () {
-            it("Should revert if a move has been made", async function () {
-                const { sut, wallets } = await loadFixture(knownGameFixture);
-
-                await sut.connect(wallets.alice).placeBet(oneEther, 4);
-
-                await expect(sut.reset()).to.be.revertedWithCustomError(sut, "RoundNotOverError");
-            });
-
-            it("Should revert if the block is the start block", async function () {
-                const { sut, wallets } = await loadFixture(knownGameFixture);
-
-                const offset = await sut.ROUND_BUFFER();
-
-                await sut.connect(wallets.alice).placeBet(oneEther, 4);
-
-                await mine(offset - 1n);
-
-                await expect(sut.reset()).to.be.revertedWithCustomError(sut, "RoundNotOverError");
-
-                const block = await ethers.provider.getBlock("latest");
-                expect(BigInt(block!.number)).to.equal((await sut.getRoundInfo()).sb);
-            });
-
-            it("Should not revert on the death block", async function () {
-                const { sut, wallets } = await loadFixture(knownGameFixture);
-
-                const offset = await sut.ROUND_BUFFER();
-
-                await sut.connect(wallets.alice).placeBet(oneEther, 4);
-
-                await mine(offset + 10n);
-                await expect(sut.reset()).to.be.revertedWithCustomError(sut, "RoundNotOverError");
-
-                await mine(1n);
-                await expect(sut.reset()).to.not.be.reverted;
-            });
-
-            it("Should not revert after the max win", async function () {
-                const { sut, wallets } = await loadFixture(maxGameFixture);
-
-                await sut.connect(wallets.alice).placeBet(oneEther, 4);
-
-                await mine(100n);
-
-                await expect(sut.reset()).to.not.be.reverted;
-            });
-
-            it("Should be callable by anyone", async function () {
-                const { sut, wallets } = await loadFixture(liquidFixture);
-
-                await sut.connect(wallets.alice).placeBet(oneEther, 4);
-
-                await mine(100);
-
-                await expect(sut.connect(wallets.alice).reset()).to.not.be.reverted;
-            });
-
-            it("Should push the multiplier to the history", async function () {
-                const { sut, wallets } = await loadFixture(knownGameFixture);
-
-                await sut.connect(wallets.alice).placeBet(oneEther, 4);
-
-                await mine(100);
-
-                await sut.reset();
-
-                const history = await sut.getHistory(1);
-                expect(history[0]).to.equal(6000000n);
-            });
-
-            it("Should push the max multiplier to the history", async function () {
-                const { sut, wallets } = await loadFixture(maxGameFixture);
-
-                await sut.connect(wallets.alice).placeBet(oneEther, 4);
-
-                await mine(100);
-
-                await sut.reset();
-
-                const history = await sut.getHistory(1);
-                expect(history[0]).to.equal(100000000n);
-            });
-
-            it("Should set the round start block to 0", async function () {
-                const { sut, wallets } = await loadFixture(liquidFixture);
-
-                await sut.connect(wallets.alice).placeBet(oneEther, 4);
-
-                await mine(100);
-
-                await sut.reset();
-
-                const game = await sut.getRoundInfo();
-                expect(game.sb).to.equal(0n);
-            });
-
-            describe("_processBets", function () {
-                it("Should ignore a cancelled bet", async function () {
-                    const { sut, grind, wallets } = await loadFixture(knownGameFixture);
-
-                    await sut.connect(wallets.alice).placeBet(oneEther, 10);
-                    await sut.connect(wallets.alice).cancelBet(0);
-
-                    await mine(100);
-
-                    const info = await sut.getRoundInfo();
-
-                    await sut.reset();
-
-                    expect(info.eb - info.sb).to.equal(11);
-
-                    expect(await grind.balanceOf(wallets.alice.address)).to.equal(initialBalance);
-                    expect(await grind.balanceOf(sut.target)).to.equal(initialBalance);
-                });
-
-                it("Should ignore a bet on the dead block", async function () {
-                    const { sut, grind, wallets } = await loadFixture(knownGameFixture);
-
-                    await sut.connect(wallets.alice).placeBet(oneEther, 11);
-
-                    await mine(100);
-
-                    const info = await sut.getRoundInfo();
-
-                    await sut.reset();
-
-                    expect(info.eb - info.sb).to.equal(11);
-
-                    expect(await grind.balanceOf(wallets.alice.address)).to.equal(initialBalance - oneEther);
-                    expect(await grind.balanceOf(sut.target)).to.equal(initialBalance + oneEther);
-                });
-
-                it("Should ignore a bet after the dead block", async function () {
-                    const { sut, grind, wallets } = await loadFixture(knownGameFixture);
-
-                    await sut.connect(wallets.alice).placeBet(oneEther, 12);
-
-                    await mine(100);
-
-                    const info = await sut.getRoundInfo();
-
-                    await sut.reset();
-
-                    expect(info.eb - info.sb).to.equal(11);
-
-                    expect(await grind.balanceOf(wallets.alice.address)).to.equal(initialBalance - oneEther);
-                    expect(await grind.balanceOf(sut.target)).to.equal(initialBalance + oneEther);
-                });
-
-                it("Should payout a winning bet", async function () {
-                    const { sut, grind, wallets } = await loadFixture(knownGameFixture);
-
-                    await sut.connect(wallets.alice).placeBet(oneEther, 10);
-
-                    await mine(100);
-
-                    const info = await sut.getRoundInfo();
-
-                    await sut.reset();
-
-                    expect(info.eb - info.sb).to.equal(11);
-
-                    expect(await grind.balanceOf(wallets.alice.address)).to.equal(initialBalance + oneEther * 5n);
-                    expect(await grind.balanceOf(sut.target)).to.equal(initialBalance - oneEther * 5n);
-                });
-
-                it("Should delete all bets", async function () {
-                    const { sut, wallets } = await loadFixture(knownGameFixture);
-
-                    await sut.connect(wallets.alice).placeBet(oneEther, 4);
-                    await sut.connect(wallets.bob).placeBet(oneEther, 4);
-                    await sut.connect(wallets.charlie).placeBet(oneEther, 4);
-
-                    await mine(100);
-
-                    expect((await sut.getBets()).length).to.equal(3);
-
-                    await sut.reset();
-
-                    expect((await sut.getBets()).length).to.equal(0);
-                });
-            });
+            await expect(sut.cashout(0)).to.be.revertedWithCustomError(sut, "InvalidCashoutIndexError");
         });
 
-        describe("_processLiquidityQueue", function () {
-            it("Should ignore an invalid add when the caller has no funds", async function () {
-                const { sut, wallets } = await loadFixture(baseFixture);
+        it("Should update the cashout index", async function () {
+            const { sut, wallets, config } = await loadFixture(betFixture);
 
-                await sut.connect(wallets.alice).queueLiquidityChange(0, initialBalance + oneEther);
-                await sut.reset();
+            await mine(config.introBlocks);
 
-                const lq = await sut.getLiquidityQueue();
-                expect(lq.length).to.equal(0);
+            await mine(config.bets[0].cashoutIndex - 3);
 
-                expect(await sut.getTotalShares()).to.equal(0);
-                expect(await sut.getShares(wallets.alice)).to.equal(0);
-            });
+            await sut.cashout(0);
 
-            it("Should ignore an invalid add when the caller has no allowance", async function () {
-                const { sut, wallets } = await loadFixture(baseFixture);
+            const updatedBets = await sut.getBetsFor(wallets.deployer.address);
+            expect(updatedBets[0].cashoutIndex).to.equal(config.bets[0].cashoutIndex - 3);
+        });
 
-                await sut.connect(wallets.alice).queueLiquidityChange(0, oneEther);
-                await sut.reset();
+        it("Should emit BetCashoutUpdated", async function () {
+            const { sut, config } = await loadFixture(betFixture);
 
-                const lq = await sut.getLiquidityQueue();
-                expect(lq.length).to.equal(0);
+            await mine(config.introBlocks);
 
-                expect(await sut.getTotalShares()).to.equal(0);
-                expect(await sut.getShares(wallets.alice)).to.equal(0);
-            });
+            await mine(config.bets[0].cashoutIndex - 3);
 
-            it("Should ignore an invalid remove", async function () {
-                const { sut, wallets } = await loadFixture(baseFixture);
-
-                await sut.queueLiquidityChange(1, oneEther);
-                await sut.reset();
-
-                const lq = await sut.getLiquidityQueue();
-                expect(lq.length).to.equal(0);
-
-                expect(await sut.getTotalShares()).to.equal(0);
-                expect(await sut.getShares(wallets.deployer)).to.equal(0);
-            });
-
-            it("Should add liquidity", async function () {
-                const { sut, grind, wallets } = await loadFixture(baseFixture);
-
-                await grind.connect(wallets.alice).approve(sut.target, oneEther);
-
-                await sut.connect(wallets.alice).queueLiquidityChange(0, oneEther);
-                await sut.reset();
-
-                const lq = await sut.getLiquidityQueue();
-                expect(lq.length).to.equal(0);
-
-                expect(await sut.getTotalShares()).to.equal(oneEther);
-                expect(await sut.getShares(wallets.alice)).to.equal(oneEther);
-                expect(await grind.balanceOf(wallets.alice.address)).to.equal(initialBalance - oneEther);
-                expect(await grind.balanceOf(sut.target)).to.equal(oneEther);
-            });
-
-            it("Should remove liquidity", async function () {
-                const { sut, grind, wallets } = await loadFixture(baseFixture);
-
-                await grind.connect(wallets.alice).approve(sut.target, oneEther);
-
-                await sut.connect(wallets.alice).queueLiquidityChange(0, oneEther);
-                await sut.connect(wallets.alice).queueLiquidityChange(1, oneEther);
-                await sut.reset();
-
-                const lq = await sut.getLiquidityQueue();
-                expect(lq.length).to.equal(0);
-
-                expect(await sut.getTotalShares()).to.equal(0);
-                expect(await sut.getShares(wallets.alice)).to.equal(0);
-
-                expect(await grind.balanceOf(wallets.alice.address)).to.equal(initialBalance);
-                expect(await grind.balanceOf(sut.target)).to.equal(0);
-            });
-
-            it("Should add multiple", async function () {
-                const { sut, grind, wallets } = await loadFixture(baseFixture);
-
-                const adds = [wallets.alice, wallets.bob, wallets.charlie];
-
-                for (const wallet of adds) {
-                    await grind.connect(wallet).approve(sut.target, oneEther);
-                    await sut.connect(wallet).queueLiquidityChange(0, oneEther);
-                }
-
-                await sut.reset();
-
-                const lq = await sut.getLiquidityQueue();
-                expect(lq.length).to.equal(0);
-
-                expect(await sut.getTotalShares()).to.equal(oneEther * BigInt(adds.length));
-                expect(await grind.balanceOf(sut.target)).to.equal(oneEther * BigInt(adds.length));
-
-                for (const wallet of adds) {
-                    expect(await sut.getShares(wallet)).to.equal(oneEther);
-                    expect(await grind.balanceOf(wallet.address)).to.equal(initialBalance - oneEther);
-                }
-            });
-
-            it("Should remove multiple", async function () {
-                const { sut, grind, wallets } = await loadFixture(baseFixture);
-
-                const adds = [wallets.alice, wallets.bob, wallets.charlie];
-                const removes = [wallets.alice, wallets.bob, wallets.charlie];
-
-                for (const wallet of adds) {
-                    await grind.connect(wallet).approve(sut.target, oneEther);
-                    await sut.connect(wallet).queueLiquidityChange(0, oneEther);
-                }
-
-                for (const wallet of removes) {
-                    await sut.connect(wallet).queueLiquidityChange(1, oneEther);
-                }
-
-                await sut.reset();
-
-                const lq = await sut.getLiquidityQueue();
-                expect(lq.length).to.equal(0);
-
-                expect(await sut.getTotalShares()).to.equal(0);
-                expect(await grind.balanceOf(sut.target)).to.equal(0);
-
-                for (const wallet of removes) {
-                    expect(await sut.getShares(wallet)).to.equal(0);
-                    expect(await grind.balanceOf(wallet.address)).to.equal(initialBalance);
-                }
-            });
-
-            it("Should behave well with multiple resets", async function () {
-                const { sut, grind, wallets } = await loadFixture(baseFixture);
-
-                let lq = await sut.getLiquidityQueue();
-
-                await grind.connect(wallets.alice).approve(sut.target, initialBalance);
-                await grind.connect(wallets.bob).approve(sut.target, initialBalance);
-                await grind.connect(wallets.charlie).approve(sut.target, initialBalance);
-
-                // ----------------------------------------------------------------------
-
-                await sut.connect(wallets.alice).queueLiquidityChange(0, oneEther);
-                await sut.connect(wallets.bob).queueLiquidityChange(0, oneEther);
-                await sut.reset();
-
-                lq = await sut.getLiquidityQueue();
-                expect(lq.length).to.equal(0);
-
-                expect(await sut.getTotalShares()).to.equal(oneEther + oneEther);
-                expect(await grind.balanceOf(sut.target)).to.equal(oneEther + oneEther);
-
-                expect(await sut.getShares(wallets.alice)).to.equal(oneEther);
-                expect(await grind.balanceOf(wallets.alice.address)).to.equal(initialBalance - oneEther);
-
-                expect(await sut.getShares(wallets.bob)).to.equal(oneEther);
-                expect(await grind.balanceOf(wallets.bob.address)).to.equal(initialBalance - oneEther);
-
-                // ----------------------------------------------------------------------
-
-                await sut.connect(wallets.bob).queueLiquidityChange(1, oneEther);
-                await sut.connect(wallets.charlie).queueLiquidityChange(0, oneEther);
-                await sut.reset();
-
-                lq = await sut.getLiquidityQueue();
-                expect(lq.length).to.equal(0);
-
-                expect(await sut.getTotalShares()).to.equal(oneEther + oneEther);
-                expect(await grind.balanceOf(sut.target)).to.equal(oneEther + oneEther);
-
-                expect(await sut.getShares(wallets.alice)).to.equal(oneEther);
-                expect(await grind.balanceOf(wallets.alice.address)).to.equal(initialBalance - oneEther);
-
-                expect(await sut.getShares(wallets.bob)).to.equal(0);
-                expect(await grind.balanceOf(wallets.bob.address)).to.equal(initialBalance);
-
-                expect(await sut.getShares(wallets.charlie)).to.equal(oneEther);
-                expect(await grind.balanceOf(wallets.charlie.address)).to.equal(initialBalance - oneEther);
-
-                // ----------------------------------------------------------------------
-
-                await sut.connect(wallets.alice).queueLiquidityChange(1, oneEther);
-                await sut.connect(wallets.charlie).queueLiquidityChange(1, oneEther);
-                await sut.reset();
-
-                lq = await sut.getLiquidityQueue();
-                expect(lq.length).to.equal(0);
-
-                expect(await sut.getTotalShares()).to.equal(0);
-                expect(await grind.balanceOf(sut.target)).to.equal(0);
-
-                expect(await sut.getShares(wallets.alice)).to.equal(0);
-                expect(await grind.balanceOf(wallets.alice.address)).to.equal(initialBalance);
-
-                expect(await sut.getShares(wallets.bob)).to.equal(0);
-                expect(await grind.balanceOf(wallets.bob.address)).to.equal(initialBalance);
-
-                expect(await sut.getShares(wallets.charlie)).to.equal(0);
-                expect(await grind.balanceOf(wallets.charlie.address)).to.equal(initialBalance);
-            });
-
-            it("Should allow for varied amounts", async function () {
-                const { sut, grind, wallets } = await loadFixture(baseFixture);
-
-                const users = [wallets.alice, wallets.bob, wallets.charlie];
-
-                for (const wallet of users) {
-                    await grind.connect(wallet).approve(sut.target, initialBalance);
-                }
-
-                const queues = [
-                    [
-                        { action: 0, wallet: wallets.alice, amount: oneEther },
-                        { action: 0, wallet: wallets.bob, amount: oneEther * 2n },
-                        { action: 0, wallet: wallets.alice, amount: oneEther },
-                        { action: 1, wallet: wallets.bob, amount: oneEther },
-                        { action: 0, wallet: wallets.charlie, amount: oneEther * 3n },
-                        { action: 1, wallet: wallets.alice, amount: oneEther },
-                    ],
-                    [
-                        { action: 1, wallet: wallets.bob, amount: oneEther },
-                        { action: 0, wallet: wallets.alice, amount: oneEther },
-                        { action: 1, wallet: wallets.charlie, amount: oneEther },
-                    ],
-                    [
-                        { action: 1, wallet: wallets.alice, amount: oneEther },
-                        { action: 1, wallet: wallets.charlie, amount: oneEther * 2n },
-                        { action: 1, wallet: wallets.alice, amount: oneEther },
-                    ],
-                ];
-
-                for (const queue of queues) {
-                    for (const item of queue) {
-                        await sut.connect(item.wallet).queueLiquidityChange(item.action, item.amount);
-                    }
-                    await sut.reset();
-                }
-
-                const lq = await sut.getLiquidityQueue();
-                expect(lq.length).to.equal(0);
-
-                expect(await sut.getTotalShares()).to.equal(0);
-                expect(await grind.balanceOf(sut.target)).to.equal(0);
-
-                for (const wallet of users) {
-                    expect(await sut.getShares(wallet)).to.equal(0);
-                    expect(await grind.balanceOf(wallet.address)).to.equal(initialBalance);
-                }
-            });
-
-            it("Should allow for added tokens", async function () {
-                const { sut, grind, wallets } = await loadFixture(baseFixture);
-
-                const adds = [
-                    { wallet: wallets.alice, amount: oneEther },
-                    { wallet: wallets.bob, amount: oneEther * 3n },
-                    { wallet: wallets.charlie, amount: oneEther * 6n },
-                ];
-
-                const share = initialBalance / 10n;
-                const removes = [
-                    { wallet: wallets.alice, multiplier: 1n },
-                    { wallet: wallets.bob, multiplier: 3n },
-                    { wallet: wallets.charlie, multiplier: 6n },
-                ];
-
-                for (const add of adds) {
-                    await grind.connect(add.wallet).approve(sut.target, initialBalance);
-                    await sut.connect(add.wallet).queueLiquidityChange(0, add.amount);
-                }
-
-                await sut.reset();
-
-                expect(await sut.getTotalShares()).to.equal(10n * oneEther);
-                expect(await grind.balanceOf(sut.target)).to.equal(10n * oneEther);
-
-                // MOCK game finishing to add new money into the pot.
-                await grind.transfer(sut.target, initialBalance); // 100 extra tokens, for 10 shares
-
-                for (const remove of removes) {
-                    await sut
-                        .connect(remove.wallet)
-                        .queueLiquidityChange(1, await sut.getShares(remove.wallet.address));
-                }
-
-                await sut.reset();
-
-                const lq = await sut.getLiquidityQueue();
-                expect(lq.length).to.equal(0);
-
-                expect(await sut.getTotalShares()).to.equal(0);
-                expect(await grind.balanceOf(sut.target)).to.equal(0);
-
-                for (const remove of removes) {
-                    expect(await sut.getShares(remove.wallet)).to.equal(0);
-                    expect(await grind.balanceOf(remove.wallet.address)).to.equal(
-                        initialBalance + share * remove.multiplier
-                    );
-                }
-            });
-
-            it("Should allow for removed tokens", async function () {
-                const { sut, grind, wallets } = await loadFixture(baseFixture);
-
-                const adds = [
-                    { wallet: wallets.alice, amount: oneEther },
-                    { wallet: wallets.bob, amount: oneEther * 3n },
-                    { wallet: wallets.charlie, amount: oneEther * 6n },
-                ];
-
-                const removes = [
-                    { wallet: wallets.alice, amount: adds[0].amount / 2n },
-                    { wallet: wallets.bob, amount: adds[1].amount / 2n },
-                    { wallet: wallets.charlie, amount: adds[2].amount / 2n },
-                ];
-
-                for (const add of adds) {
-                    await grind.connect(add.wallet).approve(sut.target, initialBalance);
-                    await sut.connect(add.wallet).queueLiquidityChange(0, add.amount);
-                }
-
-                await sut.reset();
-
-                expect(await sut.getTotalShares()).to.equal(10n * oneEther);
-                expect(await grind.balanceOf(sut.target)).to.equal(10n * oneEther);
-
-                await sut.mockLoss(5n * oneEther); // Half the tokens
-
-                for (const remove of removes) {
-                    await sut
-                        .connect(remove.wallet)
-                        .queueLiquidityChange(1, await sut.getShares(remove.wallet.address));
-                }
-
-                await sut.reset();
-
-                const lq = await sut.getLiquidityQueue();
-                expect(lq.length).to.equal(0);
-
-                expect(await sut.getTotalShares()).to.equal(0);
-                expect(await grind.balanceOf(sut.target)).to.equal(0);
-
-                for (const remove of removes) {
-                    expect(await sut.getShares(remove.wallet)).to.equal(0);
-                    expect(await grind.balanceOf(remove.wallet.address)).to.equal(initialBalance - remove.amount);
-                }
-            });
+            await expect(sut.cashout(0))
+                .to.emit(sut, "BetCashoutUpdated")
+                .withArgs(config.genesisHash, 0, config.bets[0].cashoutIndex - 3);
         });
     });
 
-    describe("queueLiquidityChange", function () {
-        it("Should revert if the amount is zero", async function () {
-            const { sut } = await loadFixture(baseFixture);
+    describe("reveal", function () {
+        const nextHash = ethers.hexlify(ethers.randomBytes(32));
 
-            await expect(sut.queueLiquidityChange(0, 0)).to.be.revertedWithCustomError(sut, "ZeroAmountError");
-        });
+        it("Should revert if the caller is not the hash producer", async function () {
+            const { sut, wallets, config } = await loadFixture(completedBetFixture);
 
-        it("Should revert if the action is greater than 1", async function () {
-            const { sut } = await loadFixture(baseFixture);
-
-            await expect(sut.queueLiquidityChange(2, oneEther)).to.be.revertedWithCustomError(
+            await expect(sut.connect(wallets.alice).reveal(config.genesisSalt, nextHash)).to.be.revertedWithCustomError(
                 sut,
-                "InvalidActionError"
+                "NotHashProducerError"
             );
         });
 
-        it("Should push to the LQ", async function () {
-            const { sut, wallets } = await loadFixture(baseFixture);
+        it("Should revert if the hash does not match the salt", async function () {
+            const { sut } = await loadFixture(baseFixture);
 
-            const tx = await sut.queueLiquidityChange(0, oneEther);
-            await tx.wait();
-
-            const lq = await sut.getLiquidityQueue();
-
-            expect(lq.length).to.equal(1);
-            expect(lq[0].user).to.equal(wallets.deployer.address);
-            expect(lq[0].amount).to.equal(oneEther);
-            expect(lq[0].action).to.equal(0);
+            await expect(sut.reveal(ethers.hexlify(ethers.randomBytes(32)), nextHash)).to.be.revertedWithCustomError(
+                sut,
+                "InvalidHashError"
+            );
         });
 
-        it("Should emit the LiquidityChangeQueued event", async function () {
-            const { sut, wallets } = await loadFixture(baseFixture);
+        it("Should revert if this function was called too early", async function () {
+            const { sut, config } = await loadFixture(betFixture);
 
-            await expect(sut.queueLiquidityChange(0, oneEther))
-                .to.emit(sut, "LiquidityChangeQueued")
-                .withArgs(0, wallets.deployer.address, oneEther);
+            await expect(sut.reveal(config.genesisSalt, nextHash)).to.be.revertedWithCustomError(
+                sut,
+                "InvalidHashError"
+            );
+        });
+
+        it("Should get the expected dead index", async function () {
+            const { sut, config } = await loadFixture(completedBetFixture);
+
+            await expect(sut.reveal(config.genesisSalt, nextHash))
+                .to.emit(sut, "RoundEnded")
+                .withArgs(config.genesisHash, config.genesisSalt, config.deadIndex);
+        });
+
+        it("Should payout winning bets", async function () {
+            const { sut, lootTable, token, wallets, config } = await loadFixture(predictableDeathTable);
+
+            const length = Number(await lootTable.getLength());
+
+            await mine(config.introBlocks + length + 1);
+
+            const info = await sut.getRoundInfo();
+            const deadIndex = await getDeadIndex(lootTable, config.genesisSalt, info[5]);
+
+            const sutBalanceBefore = await token.balanceOf(sut.target);
+            const beforeBalances = await Promise.all(config.bets.map((b) => token.balanceOf(b.wallet.address)));
+
+            await sut.reveal(config.genesisSalt, nextHash);
+
+            const sutBalanceAfter = await token.balanceOf(sut.target);
+            const afterBalances = await Promise.all(config.bets.map((b) => token.balanceOf(b.wallet.address)));
+
+            let sum = 0n;
+            for (let i = 0; i < deadIndex; i++) {
+                const expectedWin = await lootTable.multiply(config.bets[i].amount, config.bets[i].cashoutIndex);
+                expect(afterBalances[i]).to.equal(beforeBalances[i] + expectedWin);
+                sum += expectedWin;
+            }
+
+            expect(sutBalanceAfter).to.equal(sutBalanceBefore - sum);
+        });        
+        
+        it("Should payout winning bets when there is no dead block", async function () {
+            const { sut, lootTable, token, wallets, config } = await loadFixture(noDeathTable);
+
+            const length = Number(await lootTable.getLength());
+
+            await mine(config.introBlocks + length + 1);
+
+            const info = await sut.getRoundInfo();
+            const deadIndex = await getDeadIndex(lootTable, config.genesisSalt, info[5]);
+
+            expect(deadIndex).to.equal(length);
+
+            const sutBalanceBefore = await token.balanceOf(sut.target);
+            const beforeBalances = await Promise.all(config.bets.map((b) => token.balanceOf(b.wallet.address)));
+
+            await sut.reveal(config.genesisSalt, nextHash);
+
+            const sutBalanceAfter = await token.balanceOf(sut.target);
+            const afterBalances = await Promise.all(config.bets.map((b) => token.balanceOf(b.wallet.address)));
+
+            let sum = 0n;
+            for (let i = 0; i < deadIndex; i++) {
+                const expectedWin = await lootTable.multiply(config.bets[i].amount, config.bets[i].cashoutIndex);
+                expect(afterBalances[i]).to.equal(beforeBalances[i] + expectedWin);
+                sum += expectedWin;
+            }
+
+            expect(sutBalanceAfter).to.equal(sutBalanceBefore - sum);
+        });
+
+        it("Should ignore cancelled bets", async function () {
+            const { sut, lootTable, token, wallets, config } = await loadFixture(predictableDeathTable);
+
+            const cancelToExc = 2;
+            const length = Number(await lootTable.getLength());
+
+            for (let i = 0; i < cancelToExc; i++) {
+                await sut.connect(config.bets[i].wallet).cancelBet(i);
+            }
+
+            await mine(config.introBlocks + length - cancelToExc + 1);
+
+            const info = await sut.getRoundInfo();
+            const deadIndex = await getDeadIndex(lootTable, config.genesisSalt, info[5]);
+
+            const sutBalanceBefore = await token.balanceOf(sut.target);
+            const beforeBalances = await Promise.all(config.bets.map((b) => token.balanceOf(b.wallet.address)));
+
+            await sut.reveal(config.genesisSalt, nextHash);
+
+            const sutBalanceAfter = await token.balanceOf(sut.target);
+            const afterBalances = await Promise.all(config.bets.map((b) => token.balanceOf(b.wallet.address)));
+
+            let sum = 0n;
+            for (let i = cancelToExc; i < deadIndex; i++) {
+                const expectedWin = await lootTable.multiply(config.bets[i].amount, config.bets[i].cashoutIndex);
+                expect(afterBalances[i]).to.equal(beforeBalances[i] + expectedWin);
+                sum += expectedWin;
+            }
+
+            expect(sutBalanceAfter).to.equal(sutBalanceBefore - sum);
+        });
+
+        it("Should ignore dead bets", async function () {
+            const { sut, lootTable, token, wallets, config } = await loadFixture(predictableDeathTable);
+
+            const length = Number(await lootTable.getLength());
+
+            await mine(config.introBlocks + length + 1);
+
+            const info = await sut.getRoundInfo();
+            const deadIndex = await getDeadIndex(lootTable, config.genesisSalt, info[5]);
+
+            const beforeBalances = await Promise.all(config.bets.map((b) => token.balanceOf(b.wallet.address)));
+
+            await sut.reveal(config.genesisSalt, nextHash);
+
+            const afterBalances = await Promise.all(config.bets.map((b) => token.balanceOf(b.wallet.address)));
+
+            for (let i = deadIndex; i < config.bets.length; i++) {
+                expect(afterBalances[i]).to.equal(beforeBalances[i]);
+            }
+        });
+
+        it("Should clear the bets", async function () {
+            const { sut, config } = await loadFixture(completedBetFixture);
+
+            const info = await sut.getRoundInfo();
+            expect(info[4].length).to.equal(config.bets.length);
+        });
+
+        it("Should clear the liquidity queue", async function () {
+            const { sut, config } = await loadFixture(completedBetFixture);
+
+            await sut.deposit(oneEther);
+            await sut.withdraw(oneEther);
+
+            const liquidityQueue = await sut.getLiquidityQueue();
+            expect(liquidityQueue.length).to.equal(2);
+
+            await sut.reveal(config.genesisSalt, nextHash);
+
+            const newLiquidityQueue = await sut.getLiquidityQueue();
+            expect(newLiquidityQueue.length).to.equal(0);
+        });
+
+        it("Should emit RoundEnded", async function () {
+            const { sut, config } = await loadFixture(completedBetFixture);
+
+            await expect(sut.reveal(config.genesisSalt, nextHash))
+                .to.emit(sut, "RoundEnded")
+                .withArgs(config.genesisHash, config.genesisSalt, config.deadIndex);
+        });
+
+        it("Should reset the round start block", async function () {
+            const { sut, config } = await loadFixture(completedBetFixture);
+
+            await sut.reveal(config.genesisSalt, nextHash);
+
+            const roundInfo = await sut.getRoundInfo();
+            expect(roundInfo[1]).to.equal(0);
+        });
+
+        it("Should set the new round hash", async function () {
+            const { sut, config } = await loadFixture(completedBetFixture);
+
+            await sut.reveal(config.genesisSalt, nextHash);
+
+            const roundInfo = await sut.getRoundInfo();
+            expect(roundInfo[3]).to.equal(nextHash);
+        });
+
+        it("Should increment the hashIndex", async function () {
+            const { sut, config } = await loadFixture(completedBetFixture);
+
+            const previous = (await sut.getRoundInfo())[0];
+
+            await sut.reveal(config.genesisSalt, nextHash);
+
+            expect((await sut.getRoundInfo())[0]).to.equal(previous + 1n);
         });
     });
 });

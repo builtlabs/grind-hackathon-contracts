@@ -62,6 +62,10 @@ abstract contract Liquidity is ValueHolder, Ownable {
 
     // #######################################################################################
 
+    function getMaxExposureNumerator() external view returns (uint256) {
+        return _maxExposureNumerator;
+    }
+
     function getShares(address _user) external view returns (uint256) {
         return _userShares[_user];
     }
@@ -73,6 +77,8 @@ abstract contract Liquidity is ValueHolder, Ownable {
     function getLiquidityQueue() external view returns (LiquidityDelta[] memory) {
         return _liquidityQueue;
     }
+
+    // #######################################################################################
 
     function deposit(uint256 _amount) external payable notZero(_amount) {
         _receiveValue(msg.sender, _amount);

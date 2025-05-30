@@ -8,6 +8,8 @@ import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
 /// @title HashCrash
 /// @author @builtbyfrancis
 abstract contract HashCrash is Liquidity {
+    error NotActiveError();
+
     error BetNotFoundError();
     error BetNotYoursError();
     error BetCancelledError();
@@ -20,13 +22,16 @@ abstract contract HashCrash is Liquidity {
     error InvalidHashError();
     error InvalidCashoutIndexError();
 
-    event RoundStarted(bytes32 indexed roundHash, uint64 startBlock);
+    // #######################################################################################
+
+    event RoundStarted(bytes32 indexed roundHash, uint64 startBlock, uint64 hashIndex);
     event RoundEnded(bytes32 indexed roundHash, bytes32 roundSalt, uint64 deadIndex);
 
     event BetPlaced(bytes32 indexed roundHash, address indexed user, uint256 amount, uint64 cashoutIndex);
     event BetCashoutUpdated(bytes32 indexed roundHash, uint256 indexed index, uint64 cashoutIndex);
     event BetCancelled(bytes32 indexed roundHash, uint256 indexed index);
 
+    event ActiveUpdated(bool active);
     event LootTableUpdated(ILootTable lootTable);
 
     // #######################################################################################
@@ -55,6 +60,8 @@ abstract contract HashCrash is Liquidity {
     uint64 private _introBlocks;
 
     ILootTable private _stagedLootTable;
+    uint64 private _hashIndex;
+    bool private _active;
 
     // #######################################################################################
 
@@ -73,8 +80,24 @@ abstract contract HashCrash is Liquidity {
 
     // ########################################################################################
 
-    function getBets() external view returns (Bet[] memory) {
-        return _bets;
+    function getActive() external view returns (bool) {
+        return _active;
+    }
+
+    function getLootTable() external view returns (ILootTable) {
+        return _lootTable;
+    }
+
+    function getStagedLootTable() external view returns (ILootTable) {
+        return _stagedLootTable;
+    }
+
+    function getHashProducer() external view returns (address) {
+        return _hashProducer;
+    }
+
+    function getIntroBlocks() external view returns (uint64) {
+        return _introBlocks;
     }
 
     function getBetsFor(address _user) external view returns (Bet[] memory) {
@@ -102,31 +125,41 @@ abstract contract HashCrash is Liquidity {
     function getRoundInfo()
         external
         view
-        returns (uint64 _startBlock, uint256 _roundLiquidity, bytes32 _hash, bytes32[] memory _blockHashes)
+        returns (
+            uint64 hashIndex_,
+            uint64 startBlock_,
+            uint256 roundLiquidity_,
+            bytes32 hash_,
+            Bet[] memory bets_,
+            bytes32[] memory blockHashes_
+        )
     {
-        _startBlock = _roundStartBlock;
-        _roundLiquidity = _getRoundLiquidity();
-        _hash = _roundHash;
+        hashIndex_ = _hashIndex;
+        startBlock_ = _roundStartBlock;
+        roundLiquidity_ = _getRoundLiquidity();
+        hash_ = _roundHash;
+        bets_ = _bets;
 
-        if (_startBlock >= block.number) {
-            _blockHashes = new bytes32[](0);
+        if (_isIdle() || startBlock_ >= block.number) {
+            blockHashes_ = new bytes32[](0);
         } else {
-            uint64 length = uint64(block.number) - _startBlock;
-            _blockHashes = new bytes32[](length);
+            uint64 length = uint64(block.number) - startBlock_;
+            blockHashes_ = new bytes32[](length);
 
             for (uint64 i = 0; i < length; i++) {
-                _blockHashes[i] = _getBlockHash(_startBlock + i);
+                blockHashes_[i] = _getBlockHash(startBlock_ + i);
             }
         }
     }
 
-    function getSettings() external view returns (ILootTable lootTable_, address hashProducer_, uint64 introBlocks_) {
-        lootTable_ = _lootTable;
-        hashProducer_ = _hashProducer;
-        introBlocks_ = _introBlocks;
-    }
-
     // ########################################################################################
+
+    function setActive(bool active_) external onlyOwner {
+        if (_active == active_) return;
+
+        _active = active_;
+        emit ActiveUpdated(active_);
+    }
 
     function setHashProducer(address hashProducer_) external onlyOwner {
         _hashProducer = hashProducer_;
@@ -222,7 +255,7 @@ abstract contract HashCrash is Liquidity {
     }
 
     function reveal(bytes32 _salt, bytes32 _nextHash) external onlyHashProducer {
-        if (keccak256(abi.encode(_salt)) != _roundHash) revert InvalidHashError();
+        if (keccak256(abi.encodePacked(_salt)) != _roundHash) revert InvalidHashError();
 
         uint64 deadIndex = _getDeadIndex(_salt);
 
@@ -233,6 +266,9 @@ abstract contract HashCrash is Liquidity {
 
         _roundStartBlock = 0;
         _roundHash = _nextHash;
+        unchecked {
+            _hashIndex++;
+        }
     }
 
     // ########################################################################################
@@ -260,7 +296,7 @@ abstract contract HashCrash is Liquidity {
         uint64 length = uint64(_lootTable.getLength());
 
         for (uint64 i = 0; i < length; i++) {
-            uint256 rng = uint256(keccak256(abi.encode(_salt, _getBlockHash(_roundStartBlock + i))));
+            uint256 rng = uint256(keccak256(abi.encodePacked(_salt, _getBlockHash(_roundStartBlock + i))));
 
             if (_lootTable.isDead(rng, i)) {
                 return i;
@@ -275,13 +311,15 @@ abstract contract HashCrash is Liquidity {
     }
 
     function _initialiseRound() private {
+        if (!_active) revert NotActiveError();
+
         if (_stagedLootTable != ILootTable(address(0))) {
             _setLootTable(_stagedLootTable);
             delete _stagedLootTable;
         }
 
         _roundStartBlock = uint64(block.number) + _introBlocks;
-        emit RoundStarted(_roundHash, _roundStartBlock);
+        emit RoundStarted(_roundHash, _roundStartBlock, _hashIndex);
     }
 
     function _setLootTable(ILootTable lootTable_) private {

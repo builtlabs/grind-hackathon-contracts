@@ -33,7 +33,7 @@ describe("Liquidity", function () {
         it("Should set _maxExposureNumerator to 1000 (10%)", async function () {
             const { sut } = await loadFixture(fixture);
 
-            expect(await sut.harnessGetMaxExposureNumerator()).to.equal(1000);
+            expect(await sut.getMaxExposureNumerator()).to.equal(1000);
         });
     });
 
@@ -63,7 +63,7 @@ describe("Liquidity", function () {
 
             await sut.setMaxExposure(2000);
 
-            expect(await sut.harnessGetMaxExposureNumerator()).to.equal(2000);
+            expect(await sut.getMaxExposureNumerator()).to.equal(2000);
         });
     });
 

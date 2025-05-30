@@ -55,32 +55,35 @@ describe("HashCrashERC20", function () {
             expect(await sut.owner()).to.equal(config.owner);
         });
 
+        it("Should set active to false", async function () {
+            const { sut } = await loadFixture(fixture);
+
+            expect(await sut.getActive()).to.equal(false);
+        });
+
         it("Should set the intro blocks to 20", async function () {
             const { sut } = await loadFixture(fixture);
 
-            const settings = await sut.getSettings();
-            expect(settings[2]).to.equal(20);
+            expect(await sut.getIntroBlocks()).to.equal(20);
         });
 
         it("Should set the genesis hash", async function () {
             const { sut, config } = await loadFixture(fixture);
 
             const roundInfo = await sut.getRoundInfo();
-            expect(roundInfo[2]).to.equal(config.genesisHash);
+            expect(roundInfo[3]).to.equal(config.genesisHash);
         });
 
         it("Should set the hash producer", async function () {
             const { sut, config } = await loadFixture(fixture);
 
-            const settings = await sut.getSettings();
-            expect(settings[1]).to.equal(config.hashProducer);
+            expect(await sut.getHashProducer()).to.equal(config.hashProducer);
         });
 
         it("Should set the loot table", async function () {
             const { sut, lootTable } = await loadFixture(fixture);
 
-            const settings = await sut.getSettings();
-            expect(settings[0]).to.equal(lootTable.target);
+            expect(await sut.getLootTable()).to.equal(lootTable.target);
         });
 
         it("Should emit LootTableUpdated", async function () {
