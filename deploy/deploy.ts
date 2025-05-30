@@ -1,57 +1,118 @@
-import hre from "hardhat";
 import { ethers } from "hardhat";
 import { vars } from "hardhat/config";
 import { HardhatRuntimeEnvironment } from "hardhat/types";
+import { Contract, HDNodeWallet } from "ethers";
 
 import { Wallet } from "zksync-ethers";
 import { Deployer } from "@matterlabs/hardhat-zksync";
 
 const initialBalance = ethers.parseEther("100000");
 
-export default async function (hre: HardhatRuntimeEnvironment) {
-    console.log(`Running deploy script`, hre.network.name);
+interface Verify {
+    address: string;
+    constructorArguments: any[];
+}
 
-    const wallet = new Wallet(vars.get(hre.network.name === "abstractTestnet" ? "DEV_PRIVATE_KEY" : "PRIVATE_KEY"));
+const revealer = "0xc2bDed4B045bfdB5F051a13a55ed63FeEA45CB00";
 
-    const deployer = new Deployer(hre, wallet);
+const toVerify: Verify[] = [];
 
-    const GRIND = await deployer.loadArtifact("Grind");
-    const HASHCRASH = await deployer.loadArtifact("HashCrash");
+export default async function (runtime: HardhatRuntimeEnvironment) {
+    console.log(`Running deploy script`, runtime.network.name);
 
-    const grind = await deployer.deploy(GRIND);
-    await grind.waitForDeployment();
+    const wallet = new Wallet(vars.get(runtime.network.name === "abstractTestnet" ? "DEV_PRIVATE_KEY" : "PRIVATE_KEY"));
+    const deployer = new Deployer(runtime, wallet);
 
-    const grindAddress = await grind.getAddress();
+    console.log(`Using wallet: ${wallet.address}`);
 
-    const hashCrash = await deployer.deploy(HASHCRASH, [grindAddress]);
-    await hashCrash.waitForDeployment();
+    const seed = vars.get(runtime.network.name === "abstractTestnet" ? "DEV_SEED" : "SEED");
 
-    const hashCrashAddress = await hashCrash.getAddress();
+    const ethGenesisHash = getHash(getSalt(seed, 0, 0));
 
-    await tx(grind.approve(hashCrashAddress, initialBalance));
-    await tx(hashCrash.queueLiquidityChange(0, initialBalance));
-    await tx(hashCrash.reset());
-    await tx(grind.mint());
+    const linear10x = await deploy(deployer, "Linear10x", []);
 
-    console.log(`${GRIND.contractName} was deployed to ${grindAddress}`);
-    console.log(`${HASHCRASH.contractName} was deployed to ${hashCrashAddress}`);
+    const hashCrash = await deploy(deployer, "HashCrashNative", [
+        linear10x.target,
+        ethGenesisHash,
+        revealer,
+        wallet.address,
+    ]);
 
-    await sleep(20000);
+    await tx(hashCrash.setActive(true));
 
-    await verify(grindAddress, []);
-    await verify(hashCrashAddress, [grindAddress]);
+    if (runtime.network.name === "abstractTestnet") {
+        const grindGenesisHash = getHash(getSalt(seed, 1, 0));
+
+        const linear100x = await deploy(deployer, "Linear100x", []);
+
+        const grind = await deploy(deployer, "DemoERC20", []);
+
+        const grindCrash = await deploy(deployer, "HashCrashERC20", [
+            linear100x.target,
+            grindGenesisHash,
+            revealer,
+            wallet.address,
+            grind.target,
+        ]);
+
+        await tx(grind.mint(wallet.address, initialBalance));
+        await tx(grind.approve(await grindCrash.getAddress(), initialBalance));
+        await tx(grindCrash.deposit(initialBalance));
+        await tx(grindCrash.setActive(true));
+    }
+
+    await sleep(90000);
+
+    console.log(`Verifying contracts...`);
+    for (const item of toVerify) {
+        try {
+            await verify(runtime, item.address, item.constructorArguments);
+            console.log(`Verified ${item.address}`);
+        } catch (error) {
+            console.error(`Failed to verify ${item.address}:`, error);
+        }
+    }
+}
+
+async function deploy(deployer: Deployer, contractName: string, args: any[] = []): Promise<Contract> {
+    const Artifact = await deployer.loadArtifact(contractName);
+    const contract = await deployer.deploy(Artifact, args);
+    await contract.waitForDeployment();
+
+    const address = await contract.getAddress();
+
+    toVerify.push({
+        address: address,
+        constructorArguments: args,
+    });
+
+    console.log(`${Artifact.contractName} was deployed to ${address}`);
+
+    return contract;
 }
 
 async function tx(transaction: Promise<any>) {
     await (await transaction).wait();
 }
 
-async function verify(address: string, args: any[]) {
+async function verify(runtime: HardhatRuntimeEnvironment, address: string, args: any[]) {
     await sleep(1000);
-    return hre.run("verify:verify", {
+    return runtime.run("verify:verify", {
         address,
         constructorArguments: args,
     });
+}
+
+function getHash(salt: string) {
+    return ethers.keccak256(ethers.solidityPacked(["bytes32"], [salt]));
+}
+
+function getSalt(mnemonic: string, tokenIndex: number, roundIndex: number): string {
+    const path = `m/44'/60'/${tokenIndex}'/0/${roundIndex}`;
+
+    const wallet = HDNodeWallet.fromPhrase(mnemonic, undefined, path);
+
+    return wallet.privateKey;
 }
 
 function sleep(ms: number) {
