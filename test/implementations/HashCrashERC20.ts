@@ -87,7 +87,7 @@ describe("HashCrashERC20", function () {
         });
 
         it("Should emit LootTableUpdated", async function () {
-            const { token, lootTable, config } = await loadFixture(fixture);
+            const { sut, token, lootTable, config } = await loadFixture(fixture);
 
             const HASHCRASH = await ethers.getContractFactory("HashCrashERC20");
             expect(
@@ -99,7 +99,7 @@ describe("HashCrashERC20", function () {
                     token.target
                 )
             )
-                .to.emit(lootTable, "LootTableUpdated")
+                .to.emit(sut, "LootTableUpdated")
                 .withArgs(lootTable.target);
         });
     });

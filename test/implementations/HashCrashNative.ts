@@ -71,12 +71,12 @@ describe("HashCrashNative", function () {
         });
 
         it("Should emit LootTableUpdated", async function () {
-            const { lootTable, config } = await loadFixture(fixture);
+            const { sut, lootTable, config } = await loadFixture(fixture);
 
             const HASHCRASH = await ethers.getContractFactory("HashCrashNative");
             expect(await HASHCRASH.deploy(lootTable.target, config.genesisHash, config.hashProducer, config.owner))
-                .to.emit(lootTable, "LootTableUpdated")
-                .withArgs(lootTable.target);
+                .to.emit(sut, "LootTableUpdated")
+                .withArgs(sut.target);
         });
     });
 });
