@@ -5,4 +5,18 @@ contract NativeBlocking {
     function getBalance() external view returns (uint256) {
         return address(this).balance;
     }
+
+    function call(address _target, bytes calldata _data) external payable {
+        (bool success, bytes memory data) = _target.call{ value: msg.value }(_data);
+
+        if (!success) {
+            if (data.length > 0) {
+                assembly {
+                    revert(add(data, 32), mload(data))
+                }
+            } else {
+                revert("Bet failed with no reason");
+            }
+        }
+    }
 }
