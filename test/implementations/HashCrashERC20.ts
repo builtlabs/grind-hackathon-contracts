@@ -1,5 +1,6 @@
 import { loadFixture } from "@nomicfoundation/hardhat-toolbox/network-helpers";
 import { expect } from "chai";
+import { id } from "ethers";
 import { ethers } from "hardhat";
 
 function getHash(salt: string) {
@@ -87,20 +88,27 @@ describe("HashCrashERC20", function () {
         });
 
         it("Should emit LootTableUpdated", async function () {
-            const { sut, token, lootTable, config } = await loadFixture(fixture);
+            const { token, lootTable, config } = await loadFixture(fixture);
 
             const HASHCRASH = await ethers.getContractFactory("HashCrashERC20");
-            expect(
-                await HASHCRASH.deploy(
-                    lootTable.target,
-                    config.genesisHash,
-                    config.hashProducer,
-                    config.owner,
-                    token.target
-                )
-            )
-                .to.emit(sut, "LootTableUpdated")
-                .withArgs(lootTable.target);
+            const tx = await HASHCRASH.deploy(
+                lootTable.target,
+                config.genesisHash,
+                config.hashProducer,
+                config.owner,
+                token.target
+            );
+            const receipt = (await tx.deploymentTransaction()!.wait())!;
+
+            const iface = HASHCRASH.interface;
+
+            const platformSetTopic = id("LootTableUpdated(address)");
+
+            const events = receipt.logs
+                .filter((log) => log.topics[0] === platformSetTopic)
+                .map((log) => iface.decodeEventLog("LootTableUpdated", log.data, log.topics));
+
+            expect(events).to.deep.include.members([[lootTable.target]]);
         });
     });
 });

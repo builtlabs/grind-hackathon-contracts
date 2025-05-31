@@ -2,6 +2,7 @@ import { loadFixture, mine } from "@nomicfoundation/hardhat-toolbox/network-help
 import { expect } from "chai";
 import { ethers } from "hardhat";
 import { LootTable } from "../typechain-types";
+import { id } from "ethers";
 
 const initialBalance = ethers.parseEther("1000");
 const oneEther = ethers.parseEther("1");
@@ -236,20 +237,27 @@ describe("HashCrash", function () {
         });
 
         it("Should emit LootTableUpdated", async function () {
-            const { sut, token, lootTable, config } = await loadFixture(baseFixture);
+            const { token, lootTable, config } = await loadFixture(baseFixture);
 
             const HASHCRASH = await ethers.getContractFactory("HashCrashHarness");
-            expect(
-                await HASHCRASH.deploy(
-                    lootTable.target,
-                    config.genesisHash,
-                    config.hashProducer,
-                    config.owner,
-                    token.target
-                )
-            )
-                .to.emit(sut, "LootTableUpdated")
-                .withArgs(lootTable.target);
+            const tx = await HASHCRASH.deploy(
+                lootTable.target,
+                config.genesisHash,
+                config.hashProducer,
+                config.owner,
+                token.target
+            );
+            const receipt = (await tx.deploymentTransaction()!.wait())!;
+
+            const iface = HASHCRASH.interface;
+
+            const platformSetTopic = id("LootTableUpdated(address)");
+
+            const events = receipt.logs
+                .filter((log) => log.topics[0] === platformSetTopic)
+                .map((log) => iface.decodeEventLog("LootTableUpdated", log.data, log.topics));
+
+            expect(events).to.deep.include.members([[lootTable.target]]);
         });
     });
 
@@ -1036,8 +1044,8 @@ describe("HashCrash", function () {
             }
 
             expect(sutBalanceAfter).to.equal(sutBalanceBefore - sum);
-        });        
-        
+        });
+
         it("Should payout winning bets when there is no dead block", async function () {
             const { sut, lootTable, token, wallets, config } = await loadFixture(noDeathTable);
 
