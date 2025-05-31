@@ -14,6 +14,7 @@ interface Verify {
 }
 
 const revealer = "0xc2bDed4B045bfdB5F051a13a55ed63FeEA45CB00";
+const platform = "0x25bbEDE914021Fdb13B57d9866bB370965d015c1";
 
 const toVerify: Verify[] = [];
 
@@ -25,6 +26,8 @@ export default async function (runtime: HardhatRuntimeEnvironment) {
 
     console.log(`Using wallet: ${wallet.address}`);
 
+    await deploy(deployer, "PlatformInterface", [platform, wallet.address]);
+    
     const seed = vars.get(runtime.network.name === "abstractTestnet" ? "DEV_SEED" : "SEED");
 
     const ethGenesisHash = getHash(getSalt(seed, 0, 0));
