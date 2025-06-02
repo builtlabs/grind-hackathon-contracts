@@ -6,7 +6,7 @@ import { hexlify } from "ethers";
 import fs from "fs";
 
 const expectedEv = 97;
-const expectedLength = 50;
+const expectedLength = 33;
 
 const log = true;
 function logIfEnabled(...args: any[]) {
@@ -15,11 +15,11 @@ function logIfEnabled(...args: any[]) {
     }
 }
 
-describe("Linear100x", function () {
+describe("FixedRTP10x", function () {
     async function fixture() {
         const [deployer] = await ethers.getSigners();
 
-        const LOOT = await ethers.getContractFactory("Linear100x");
+        const LOOT = await ethers.getContractFactory("FixedRTP10x");
         const loot = await LOOT.deploy();
         await loot.waitForDeployment();
 

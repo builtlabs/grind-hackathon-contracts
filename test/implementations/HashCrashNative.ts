@@ -13,8 +13,8 @@ describe("HashCrashNative", function () {
 
         const genesisSalt = ethers.hexlify(ethers.randomBytes(32));
 
-        const LINEAR10x = await ethers.getContractFactory("Linear10x");
-        const lootTable = await LINEAR10x.deploy();
+        const FixedRTP10x = await ethers.getContractFactory("FixedRTP10x");
+        const lootTable = await FixedRTP10x.deploy();
         await lootTable.waitForDeployment();
 
         const HASHCRASH = await ethers.getContractFactory("HashCrashNative");

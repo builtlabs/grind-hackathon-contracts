@@ -32,10 +32,10 @@ export default async function (runtime: HardhatRuntimeEnvironment) {
 
     const ethGenesisHash = getHash(getSalt(seed, 0, 0));
 
-    const linear10x = await deploy(deployer, "Linear10x", []);
+    const fixedRTP10x = await deploy(deployer, "FixedRTP10x", []);
 
     const hashCrash = await deploy(deployer, "HashCrashNative", [
-        linear10x.target,
+        fixedRTP10x.target,
         ethGenesisHash,
         revealer,
         wallet.address,
@@ -46,12 +46,12 @@ export default async function (runtime: HardhatRuntimeEnvironment) {
     if (runtime.network.name === "abstractTestnet") {
         const grindGenesisHash = getHash(getSalt(seed, 1, 0));
 
-        const linear100x = await deploy(deployer, "Linear100x", []);
+        const fixedRTP100x = await deploy(deployer, "FixedRTP100x", []);
 
         const grind = await deploy(deployer, "DemoERC20", []);
 
         const grindCrash = await deploy(deployer, "HashCrashERC20", [
-            linear100x.target,
+            fixedRTP100x.target,
             grindGenesisHash,
             revealer,
             wallet.address,

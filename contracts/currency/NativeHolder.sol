@@ -4,7 +4,7 @@ pragma solidity ^0.8.24;
 import { ValueHolder } from "./ValueHolder.sol";
 
 /// @title NativeHolder
-/// @author @builtbyfrancis
+/// @notice An implementation of the ValueHolder contract for the native currency.
 contract NativeHolder is ValueHolder {
     error NativeHolderInvalidReceive();
     error NativeHolderTransferFailed();

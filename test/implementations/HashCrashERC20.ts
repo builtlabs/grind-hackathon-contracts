@@ -17,8 +17,8 @@ describe("HashCrashERC20", function () {
         const token = await TOKEN.deploy();
         await token.waitForDeployment();
 
-        const LINEAR10x = await ethers.getContractFactory("Linear10x");
-        const lootTable = await LINEAR10x.deploy();
+        const FixedRTP10x = await ethers.getContractFactory("FixedRTP10x");
+        const lootTable = await FixedRTP10x.deploy();
         await lootTable.waitForDeployment();
 
         const HASHCRASH = await ethers.getContractFactory("HashCrashERC20");

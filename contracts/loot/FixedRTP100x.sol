@@ -3,9 +3,9 @@ pragma solidity ^0.8.24;
 
 import { LootTable } from "./LootTable.sol";
 
-/// @title Linear100x
-/// @author @builtbyfrancis
-contract Linear100x is LootTable {
+/// @title FixedRTP100x
+/// @notice A loot table with 50 entries, starting at 1.01x and ending at 100x, with a constant expected RTP of 0.97.
+contract FixedRTP100x is LootTable {
     function _getLength() internal pure override returns (uint256) {
         return 50;
     }

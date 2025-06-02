@@ -6,7 +6,7 @@ import { ILootTable } from "../interfaces/ILootTable.sol";
 import { ERC20Holder } from "../currency/ERC20Holder.sol";
 
 /// @title HashCrashERC20
-/// @author @builtbyfrancis
+/// @notice A hashcrash implementation using a given ERC20 Token.
 contract HashCrashERC20 is HashCrash, ERC20Holder {
     constructor(
         ILootTable lootTable_,

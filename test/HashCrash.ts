@@ -40,8 +40,8 @@ describe("HashCrash", function () {
         const token = await TOKEN.deploy();
         await token.waitForDeployment();
 
-        const LINEAR10x = await ethers.getContractFactory("Linear10x");
-        const lootTable = await LINEAR10x.deploy();
+        const FixedRTP10x = await ethers.getContractFactory("FixedRTP10x");
+        const lootTable = await FixedRTP10x.deploy();
         await lootTable.waitForDeployment();
 
         const HASHCRASH = await ethers.getContractFactory("HashCrashHarness");
@@ -590,8 +590,8 @@ describe("HashCrash", function () {
                 async function stagedLootTableFixture() {
                     const { sut, lootTable, token, wallets, config } = await loadFixture(liquidFixture);
 
-                    const LINEAR100x = await ethers.getContractFactory("Linear100x");
-                    const stagedLootTable = await LINEAR100x.deploy();
+                    const FixedRTP100x = await ethers.getContractFactory("FixedRTP100x");
+                    const stagedLootTable = await FixedRTP100x.deploy();
                     await stagedLootTable.waitForDeployment();
 
                     await sut.placeBet(oneEther, 10);

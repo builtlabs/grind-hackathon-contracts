@@ -2,8 +2,9 @@
 pragma solidity ^0.8.24;
 
 /// @title ValueHolder
-/// @author @builtbyfrancis
+/// @notice A base contract capable of holding and managing value.
 abstract contract ValueHolder {
+    /// @notice Returns the balance of value held within this contract.
     function balance() external view returns (uint256) {
         return _getBalance();
     }

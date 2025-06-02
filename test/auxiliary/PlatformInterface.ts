@@ -66,16 +66,16 @@ describe("PlatformInterface", function () {
             expect(await sut.getPlatform()).to.equal(wallets.platform.address);
         });
 
+        it("Should set referral[0]", async function () {
+            const { sut } = await loadFixture(fixture);
+
+            expect(await sut.getReferralReward(0)).to.equal(1500n); // 15%
+        });
+
         it("Should set referral[1]", async function () {
             const { sut } = await loadFixture(fixture);
 
-            expect(await sut.getReferralBPS(1)).to.equal(1500n); // 15%
-        });
-
-        it("Should set referral[2]", async function () {
-            const { sut } = await loadFixture(fixture);
-
-            expect(await sut.getReferralBPS(2)).to.equal(500n); // 5%
+            expect(await sut.getReferralReward(1)).to.equal(500n); // 5%
         });
 
         it("Should emit PlatformSet and ReferralRewardSet", async function () {
@@ -101,8 +101,8 @@ describe("PlatformInterface", function () {
                 .map((log) => iface.decodeEventLog("ReferralRewardSet", log.data, log.topics));
 
             expect(referralEvents).to.deep.include.members([
-                [1n, 1500n],
-                [2n, 500n],
+                [0n, 1500n],
+                [1n, 500n],
             ]);
         });
     });
@@ -133,44 +133,35 @@ describe("PlatformInterface", function () {
         });
     });
 
-    describe("setReferralBPS", function () {
+    describe("setReferralReward", function () {
         it("Should revert if the caller is not the owner", async function () {
             const { sut, wallets } = await loadFixture(fixture);
 
-            await expect(sut.connect(wallets.b).setReferralBPS(1, 1000n))
+            await expect(sut.connect(wallets.b).setReferralReward(1, 1000n))
                 .to.be.revertedWithCustomError(sut, "OwnableUnauthorizedAccount")
                 .withArgs(wallets.b.address);
-        });
-
-        it("Should revert if the index is 0", async function () {
-            const { sut, wallets } = await loadFixture(fixture);
-
-            await expect(sut.connect(wallets.deployer).setReferralBPS(0, 1000n)).to.be.revertedWithCustomError(
-                sut,
-                "ReservedIndexError"
-            );
         });
 
         it("Should return if the bps > DENOMINATOR", async function () {
             const { sut, wallets } = await loadFixture(fixture);
 
             await expect(
-                sut.connect(wallets.deployer).setReferralBPS(1, DENOMINATOR + 1n)
+                sut.connect(wallets.deployer).setReferralReward(1, DENOMINATOR + 1n)
             ).to.be.revertedWithCustomError(sut, "InvalidValueError");
         });
 
         it("Should set the _referralBPS", async function () {
             const { sut, wallets } = await loadFixture(fixture);
 
-            await sut.connect(wallets.deployer).setReferralBPS(1, 1000n);
+            await sut.connect(wallets.deployer).setReferralReward(1, 1000n);
 
-            expect(await sut.getReferralBPS(1)).to.equal(1000n);
+            expect(await sut.getReferralReward(1)).to.equal(1000n);
         });
 
         it("Should emit ReferralRewardSet", async function () {
             const { sut, wallets } = await loadFixture(fixture);
 
-            await expect(sut.connect(wallets.deployer).setReferralBPS(1, 1000n))
+            await expect(sut.connect(wallets.deployer).setReferralReward(1, 1000n))
                 .to.emit(sut, "ReferralRewardSet")
                 .withArgs(1, 1000n);
         });
@@ -345,9 +336,7 @@ describe("PlatformInterface", function () {
                 .map((log) => iface.decodeEventLog("RewardClaimed", log.data, log.topics));
 
             expect(rewardClaimedEvents.length).to.equal(1);
-            expect(rewardClaimedEvents).to.deep.include.members([
-                [wallets.a.address, NATIVE,rewardsBefore[1] ],
-            ]);
+            expect(rewardClaimedEvents).to.deep.include.members([[wallets.a.address, NATIVE, rewardsBefore[1]]]);
         });
     });
 

@@ -6,7 +6,7 @@ import { SafeERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.s
 import { ValueHolder } from "./ValueHolder.sol";
 
 /// @title ERC20Holder
-/// @author @builtbyfrancis
+/// @notice An implementation of the ValueHolder contract for a given ERC20 token.
 contract ERC20Holder is ValueHolder {
     IERC20 private immutable _token;
 
@@ -18,6 +18,7 @@ contract ERC20Holder is ValueHolder {
 
     // #######################################################################################
 
+    /// @notice Returns the address of the ERC20 token used by this contract.
     function token() external view returns (address) {
         return address(_token);
     }

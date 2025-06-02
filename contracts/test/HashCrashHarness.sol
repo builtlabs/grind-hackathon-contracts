@@ -5,8 +5,6 @@ import { HashCrash } from "../HashCrash.sol";
 import { ILootTable } from "../interfaces/ILootTable.sol";
 import { ERC20Holder } from "../currency/ERC20Holder.sol";
 
-/// @title HashCrashERC20
-/// @author @builtbyfrancis
 contract HashCrashHarness is HashCrash, ERC20Holder {
     constructor(
         ILootTable lootTable_,

@@ -6,7 +6,7 @@ import { ILootTable } from "../interfaces/ILootTable.sol";
 import { NativeHolder } from "../currency/NativeHolder.sol";
 
 /// @title HashCrashNative
-/// @author @builtbyfrancis
+/// @notice A hashcrash implementation using the chains native token.
 contract HashCrashNative is HashCrash, NativeHolder {
     constructor(
         ILootTable lootTable_,
