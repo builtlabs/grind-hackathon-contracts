@@ -19,6 +19,7 @@ contract PlatformInterface is Ownable {
     error FailedToSendNativeError();
 
     event PlatformSet(address indexed platform);
+    event StartSeason(uint64 indexed season, address[] gamemodes);
 
     event Referral(address indexed user, address indexed referrer);
     event ReferralRewardSet(uint256 indexed index, uint256 numerator);
@@ -29,6 +30,7 @@ contract PlatformInterface is Ownable {
     // #######################################################################################
 
     address private _platform;
+    uint64 private _season;
 
     mapping(address => address) private _referredBy;
     mapping(uint256 => uint256) private _referralReward;
@@ -48,6 +50,11 @@ contract PlatformInterface is Ownable {
     }
 
     // #######################################################################################
+
+    /// @notice Returns the next season number.
+    function getNextSeason() external view returns (uint64) {
+        return _season;
+    }
 
     /// @notice Returns the current platform address.
     function getPlatform() external view returns (address) {
@@ -79,6 +86,15 @@ contract PlatformInterface is Ownable {
     }
 
     // #######################################################################################
+
+    /// @notice Starts a new season. This can only be called by the owner of the contract.
+    /// @param _gamemodes The list of game contracts tracked in this season.
+    function startSeason(address[] calldata _gamemodes) external onlyOwner {
+        emit StartSeason(_season, _gamemodes);
+        unchecked {
+            _season++;
+        }
+    }
 
     /// @notice Sets the platform address. This can only be called by the owner of the contract.
     /// @param platform_ The new platform address.

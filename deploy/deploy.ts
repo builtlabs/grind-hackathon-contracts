@@ -26,7 +26,7 @@ export default async function (runtime: HardhatRuntimeEnvironment) {
 
     console.log(`Using wallet: ${wallet.address}`);
 
-    await deploy(deployer, "PlatformInterface", [platform, wallet.address]);
+    const platformInterface = await deploy(deployer, "PlatformInterface", [platform, wallet.address]);
     
     const seed = vars.get(runtime.network.name === "abstractTestnet" ? "DEV_SEED" : "SEED");
 
@@ -43,6 +43,8 @@ export default async function (runtime: HardhatRuntimeEnvironment) {
 
     await tx(hashCrash.setActive(true));
 
+    const gamemodes = [hashCrash.target];
+
     if (runtime.network.name === "abstractTestnet") {
         const grindGenesisHash = getHash(getSalt(seed, 1, 0));
 
@@ -58,11 +60,15 @@ export default async function (runtime: HardhatRuntimeEnvironment) {
             grind.target,
         ]);
 
+        gamemodes.push(grindCrash.target);
+
         await tx(grind.mint(wallet.address, initialBalance));
         await tx(grind.approve(await grindCrash.getAddress(), initialBalance));
         await tx(grindCrash.deposit(initialBalance));
         await tx(grindCrash.setActive(true));
     }
+
+    await tx(platformInterface.startSeason(gamemodes));
 
     await sleep(90000);
 
