@@ -53,7 +53,7 @@ abstract contract Liquidity is ValueHolder, Ownable {
 
     // #######################################################################################
 
-    /// @notice Sets the maximum exposure numerator. Can only be set by the owner.
+    /// @notice Sets the maximum exposure numerator.
     /// @param _numerator The numerator for the maximum exposure, must be between 100 and 5000 (1% to 50%).
     function setMaxExposure(uint256 _numerator) external onlyOwner {
         if (_numerator < 100 || _numerator > 5000) {

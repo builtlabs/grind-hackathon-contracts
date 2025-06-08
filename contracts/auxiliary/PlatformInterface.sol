@@ -87,7 +87,7 @@ contract PlatformInterface is Ownable {
 
     // #######################################################################################
 
-    /// @notice Starts a new season. This can only be called by the owner of the contract.
+    /// @notice Starts a new season.
     /// @param _gamemodes The list of game contracts tracked in this season.
     function startSeason(address[] calldata _gamemodes) external onlyOwner {
         emit StartSeason(_season, _gamemodes);
@@ -96,13 +96,13 @@ contract PlatformInterface is Ownable {
         }
     }
 
-    /// @notice Sets the platform address. This can only be called by the owner of the contract.
+    /// @notice Sets the platform address.
     /// @param platform_ The new platform address.
     function setPlatform(address platform_) external onlyOwner {
         _setPlatform(platform_);
     }
 
-    /// @notice Sets the referral reward numerator for a given index. This can only be called by the owner of the contract.
+    /// @notice Sets the referral reward numerator for a given index.
     /// @param _index The index of the referral reward.
     /// @param _numerator The numerator for the referral reward, must be less than or equal to DENOMINATOR.
     /// @dev It is the callers responsibility to ensure the sum of all numerators does not exceed DENOMINATOR.

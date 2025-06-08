@@ -172,7 +172,7 @@ abstract contract HashCrash is Liquidity {
 
     // ########################################################################################
 
-    /// @notice Sets the active state of the game. Can only be called by the owner.
+    /// @notice Sets the active state of the game.
     /// @param active_ The new active state.
     /// @dev If the game is set to inactive, it will not allow the start of a new round.
     function setActive(bool active_) external onlyOwner {
@@ -182,19 +182,19 @@ abstract contract HashCrash is Liquidity {
         emit ActiveUpdated(active_);
     }
 
-    /// @notice Sets the hash producer address. Can only be called by the owner.
+    /// @notice Sets the hash producer address.
     /// @param hashProducer_ The new hash producer address.
     function setHashProducer(address hashProducer_) external onlyOwner {
         _hashProducer = hashProducer_;
     }
 
-    /// @notice Sets the number of intro blocks before the round starts. Can only be called by the owner.
+    /// @notice Sets the number of intro blocks before the round starts.
     /// @param introBlocks_ The number of intro blocks.
     function setIntroBlocks(uint64 introBlocks_) external onlyOwner {
         _introBlocks = introBlocks_;
     }
 
-    /// @notice Sets the loot table for the game. Can only be called by the owner.
+    /// @notice Sets the loot table for the game.
     /// @param lootTable_ The new loot table to use.
     /// @dev If the game is currently idle, the loot table is set immediately. Otherwise, it is staged for the next round.
     function setLootTable(ILootTable lootTable_) external onlyOwner {
