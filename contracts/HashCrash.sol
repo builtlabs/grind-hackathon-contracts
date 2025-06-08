@@ -25,6 +25,7 @@ abstract contract HashCrash is Liquidity {
     // #######################################################################################
 
     event RoundStarted(bytes32 indexed roundHash, uint64 startBlock, uint64 hashIndex);
+    event RoundAccelerated(bytes32 indexed roundHash, uint64 startBlock);
     event RoundEnded(bytes32 indexed roundHash, bytes32 roundSalt, uint64 deadIndex);
 
     event BetPlaced(bytes32 indexed roundHash, address indexed user, uint256 amount, uint64 cashoutIndex);
@@ -58,6 +59,7 @@ abstract contract HashCrash is Liquidity {
 
     ILootTable private _lootTable;
     uint64 private _introBlocks;
+    uint32 private _reducedIntroBlocks;
 
     ILootTable private _stagedLootTable;
     uint64 private _hashIndex;
@@ -79,6 +81,7 @@ abstract contract HashCrash is Liquidity {
         address owner_
     ) Liquidity(lowLiquidityThreshold_) Ownable(owner_) {
         _introBlocks = 20;
+        _reducedIntroBlocks = 5;
         _roundHash = genesisHash_;
         _hashProducer = hashProducer_;
 
@@ -110,6 +113,11 @@ abstract contract HashCrash is Liquidity {
     /// @notice Returns the number of blocks between the first bet and the start of the round.
     function getIntroBlocks() external view returns (uint64) {
         return _introBlocks;
+    }
+
+    /// @notice Returns the number of blocks the round intro is reduced to when it hits low liquidity.
+    function getReducedIntroBlocks() external view returns (uint32) {
+        return _reducedIntroBlocks;
     }
 
     /// @notice Returns all bets placed in the current round by the given user.
@@ -194,6 +202,12 @@ abstract contract HashCrash is Liquidity {
     /// @param introBlocks_ The number of intro blocks.
     function setIntroBlocks(uint64 introBlocks_) external onlyOwner {
         _introBlocks = introBlocks_;
+    }
+
+    /// @notice Sets the maximum number of intro blocks once low liquidity is hit.
+    /// @param reducedIntroBlocks_ The reduced number of intro blocks.
+    function setReducedIntroBlocks(uint32 reducedIntroBlocks_) external onlyOwner {
+        _reducedIntroBlocks = reducedIntroBlocks_;
     }
 
     /// @notice Sets the loot table for the game.
@@ -319,6 +333,13 @@ abstract contract HashCrash is Liquidity {
 
     function _canChangeLiquidity() internal view override returns (bool) {
         return _isIdle();
+    }
+
+    function _onLowLiquidity() internal override {
+        if (_roundStartBlock != 0 && block.number < _roundStartBlock - _reducedIntroBlocks) {
+            _roundStartBlock = uint64(block.number + _reducedIntroBlocks);
+            emit RoundAccelerated(_roundHash, _roundStartBlock);
+        }
     }
 
     // ########################################################################################

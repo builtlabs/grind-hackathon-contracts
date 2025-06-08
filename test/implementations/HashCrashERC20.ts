@@ -77,6 +77,12 @@ describe("HashCrashERC20", function () {
             expect(await sut.getIntroBlocks()).to.equal(20);
         });
 
+        it("Should set the reduced intro blocks to 5", async function () {
+            const { sut } = await loadFixture(fixture);
+
+            expect(await sut.getReducedIntroBlocks()).to.equal(5);
+        });
+
         it("Should set the genesis hash", async function () {
             const { sut, config } = await loadFixture(fixture);
 

@@ -32,4 +32,8 @@ contract HashCrashHarness is HashCrash, ERC20Holder {
             }
         }
     }
+
+    function callOnLowLiquidity() external {
+        _onLowLiquidity();
+    }
 }

@@ -73,6 +73,7 @@ describe("HashCrash", function () {
                 hashProducer: deployer.address,
                 owner: deployer.address,
                 introBlocks: 20,
+                reducedIntroBlocks: 5,
                 liquidityPerRound: (total: bigint) => (total * 1000n) / 10000n,
             },
         };
@@ -225,6 +226,12 @@ describe("HashCrash", function () {
             expect(await sut.getIntroBlocks()).to.equal(config.introBlocks);
         });
 
+        it("Should set the reduced intro blocks to 5", async function () {
+            const { sut, config } = await loadFixture(baseFixture);
+
+            expect(await sut.getReducedIntroBlocks()).to.equal(config.reducedIntroBlocks);
+        });
+
         it("Should set the genesis hash", async function () {
             const { sut, config } = await loadFixture(baseFixture);
 
@@ -322,6 +329,14 @@ describe("HashCrash", function () {
             const { sut, config } = await loadFixture(baseFixture);
 
             expect(await sut.getIntroBlocks()).to.equal(config.introBlocks);
+        });
+    });
+
+    describe("getReducedIntroBlocks", function () {
+        it("Should return the set reduced intro blocks", async function () {
+            const { sut, config } = await loadFixture(baseFixture);
+
+            expect(await sut.getReducedIntroBlocks()).to.equal(config.reducedIntroBlocks);
         });
     });
 
@@ -546,6 +561,25 @@ describe("HashCrash", function () {
             await sut.setIntroBlocks(10);
 
             expect(await sut.getIntroBlocks()).to.equal(10);
+        });
+    });
+
+    describe("setReducedIntroBlocks", function () {
+        it("Should revert if the caller is not the owner", async function () {
+            const { sut, wallets } = await loadFixture(baseFixture);
+
+            await expect(sut.connect(wallets.alice).setReducedIntroBlocks(10)).to.be.revertedWithCustomError(
+                sut,
+                "OwnableUnauthorizedAccount"
+            );
+        });
+
+        it("Should set the reduced intro blocks", async function () {
+            const { sut } = await loadFixture(baseFixture);
+
+            await sut.setReducedIntroBlocks(10);
+
+            expect(await sut.getReducedIntroBlocks()).to.equal(10);
         });
     });
 
@@ -1195,6 +1229,64 @@ describe("HashCrash", function () {
             await sut.reveal(config.genesisSalt, nextHash);
 
             expect((await sut.getRoundInfo())[0]).to.equal(previous + 1n);
+        });
+    });
+
+    describe("_onLowLiquidity", function () {
+        it("Should do nothing if the start block is zero", async function () {
+            const { sut } = await loadFixture(liquidFixture);
+
+            const roundInfo = await sut.getRoundInfo();
+            expect(roundInfo[1]).to.equal(0);
+
+            await sut.callOnLowLiquidity();
+
+            const newRoundInfo = await sut.getRoundInfo();
+            expect(newRoundInfo[1]).to.equal(0);
+        });
+
+        it("Should do nothing if the start block is already below the reduced value", async function () {
+            const { sut, config } = await loadFixture(liquidFixture);
+
+            await sut.placeBet(oneEther, 10);
+            const startblock = (await ethers.provider.getBlockNumber()) + config.introBlocks;
+
+            await mine(config.introBlocks - config.reducedIntroBlocks);
+
+            const roundInfo = await sut.getRoundInfo();
+            expect(roundInfo[1]).to.equal(startblock);
+
+            await sut.callOnLowLiquidity();
+
+            const newRoundInfo = await sut.getRoundInfo();
+            expect(newRoundInfo[1]).to.equal(startblock);
+        });
+
+        it("Should set the round start block to the new reduced value", async function () {
+            const { sut, config } = await loadFixture(liquidFixture);
+
+            await sut.placeBet(oneEther, 10);
+            const startblock = (await ethers.provider.getBlockNumber()) + config.introBlocks;
+
+            const roundInfo = await sut.getRoundInfo();
+            expect(roundInfo[1]).to.equal(startblock);
+
+            await sut.callOnLowLiquidity();
+            const newStartBlock = (await ethers.provider.getBlockNumber()) + config.reducedIntroBlocks;
+
+            const newRoundInfo = await sut.getRoundInfo();
+            expect(newRoundInfo[1]).to.equal(newStartBlock);
+        });
+
+        it("Should emit RoundAccelerated", async function () {
+            const { sut, config } = await loadFixture(liquidFixture);
+
+            await sut.placeBet(oneEther, 10);
+
+            const previousBlockNumber = await ethers.provider.getBlockNumber();
+            await expect(sut.callOnLowLiquidity())
+                .to.emit(sut, "RoundAccelerated")
+                .withArgs(config.genesisHash, previousBlockNumber + 1 + config.reducedIntroBlocks);
         });
     });
 });
