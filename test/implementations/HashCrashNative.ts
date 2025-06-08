@@ -3,6 +3,8 @@ import { expect } from "chai";
 import { id } from "ethers";
 import { ethers } from "hardhat";
 
+const lowLiquidityThreshold = ethers.parseEther("0.1");
+
 function getHash(salt: string) {
     return ethers.keccak256(ethers.toUtf8Bytes(salt));
 }
@@ -18,7 +20,7 @@ describe("HashCrashNative", function () {
         await lootTable.waitForDeployment();
 
         const HASHCRASH = await ethers.getContractFactory("HashCrashNative");
-        const sut = await HASHCRASH.deploy(lootTable.target, getHash(genesisSalt), deployer.address, deployer.address);
+        const sut = await HASHCRASH.deploy(lootTable.target, getHash(genesisSalt), deployer.address, lowLiquidityThreshold, deployer.address);
         await sut.waitForDeployment();
 
         return {
@@ -38,6 +40,12 @@ describe("HashCrashNative", function () {
             const { sut, config } = await loadFixture(fixture);
 
             expect(await sut.owner()).to.equal(config.owner);
+        });
+
+        it("Should set the low liquidity threshold", async function () {
+            const { sut } = await loadFixture(fixture);
+
+            expect(await sut.getLowLiquidityThreshold()).to.equal(lowLiquidityThreshold);
         });
 
         it("Should set active to false", async function () {
@@ -79,6 +87,7 @@ describe("HashCrashNative", function () {
                 lootTable.target,
                 config.genesisHash,
                 config.hashProducer,
+                lowLiquidityThreshold,
                 config.owner
             );
             const receipt = (await tx.deploymentTransaction()!.wait())!;

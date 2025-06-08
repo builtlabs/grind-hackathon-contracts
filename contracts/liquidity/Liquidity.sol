@@ -35,7 +35,8 @@ abstract contract Liquidity is ValueHolder, Ownable {
     uint256 private _totalShares;
 
     uint256 private _availableLiquidity;
-    uint256 private _maxExposureNumerator;
+    uint128 private _maxExposureNumerator;
+    uint128 private _lowLiquidityThreshold;
 
     // #######################################################################################
 
@@ -46,16 +47,18 @@ abstract contract Liquidity is ValueHolder, Ownable {
 
     // #######################################################################################
 
-    /// @notice Constructor sets the initial max liquidity exposure to 10%.
-    constructor() {
+    /// @notice Constructor sets the initial max liquidity exposure to 10% and the low liquidity threshold.
+    /// @param lowLiquidityThreshold_ The threshold below which the parent is notified the _availableLiquidity is low.
+    constructor(uint128 lowLiquidityThreshold_) {
         _maxExposureNumerator = 1000; // 10%
+        _lowLiquidityThreshold = lowLiquidityThreshold_;
     }
 
     // #######################################################################################
 
     /// @notice Sets the maximum exposure numerator.
     /// @param _numerator The numerator for the maximum exposure, must be between 100 and 5000 (1% to 50%).
-    function setMaxExposure(uint256 _numerator) external onlyOwner {
+    function setMaxExposure(uint128 _numerator) external onlyOwner {
         if (_numerator < 100 || _numerator > 5000) {
             revert InvalidMaxExposure();
         }
@@ -63,11 +66,22 @@ abstract contract Liquidity is ValueHolder, Ownable {
         _maxExposureNumerator = _numerator;
     }
 
+    /// @notice Sets the low liquidity threshold.
+    /// @param _value The new low liquidity threshold.
+    function setLowLiquidityThreshold(uint128 _value) external onlyOwner {
+        _lowLiquidityThreshold = _value;
+    }
+
     // #######################################################################################
 
     /// @notice Returns the current maximum exposure numerator.
-    function getMaxExposureNumerator() external view returns (uint256) {
+    function getMaxExposureNumerator() external view returns (uint128) {
         return _maxExposureNumerator;
+    }
+
+    /// @notice Returns the current low liquidity threshold.
+    function getLowLiquidityThreshold() external view returns (uint128) {
+        return _lowLiquidityThreshold;
     }
 
     /// @notice Returns the number of shares held by the given user.
@@ -160,6 +174,10 @@ abstract contract Liquidity is ValueHolder, Ownable {
         unchecked {
             _availableLiquidity -= _amount;
         }
+
+        if (_availableLiquidity < _lowLiquidityThreshold) {
+            _onLowLiquidity();
+        }
     }
 
     function _releaseRoundLiquidity(uint256 _amount) internal {
@@ -171,6 +189,11 @@ abstract contract Liquidity is ValueHolder, Ownable {
     // #######################################################################################
 
     function _canChangeLiquidity() internal view virtual returns (bool);
+
+    function _onLowLiquidity() internal virtual {
+        // This function can be overridden by the parent contract to handle low liquidity situations.
+        // For example, it could start the game early.
+    }
 
     // #######################################################################################
 

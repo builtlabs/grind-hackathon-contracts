@@ -3,6 +3,8 @@ import { expect } from "chai";
 import { id } from "ethers";
 import { ethers } from "hardhat";
 
+const lowLiquidityThreshold = ethers.parseEther("0.1");
+
 function getHash(salt: string) {
     return ethers.keccak256(ethers.toUtf8Bytes(salt));
 }
@@ -26,6 +28,7 @@ describe("HashCrashERC20", function () {
             lootTable.target,
             getHash(genesisSalt),
             deployer.address,
+            lowLiquidityThreshold,
             deployer.address,
             token.target
         );
@@ -48,6 +51,12 @@ describe("HashCrashERC20", function () {
         it("Should set the token address", async function () {
             const { sut, token } = await loadFixture(fixture);
             expect(await sut.token()).to.equal(token.target);
+        });
+
+        it("Should set the low liquidity threshold", async function () {
+            const { sut } = await loadFixture(fixture);
+
+            expect(await sut.getLowLiquidityThreshold()).to.equal(lowLiquidityThreshold);
         });
 
         it("Should set the owner address", async function () {
@@ -95,6 +104,7 @@ describe("HashCrashERC20", function () {
                 lootTable.target,
                 config.genesisHash,
                 config.hashProducer,
+                lowLiquidityThreshold,
                 config.owner,
                 token.target
             );

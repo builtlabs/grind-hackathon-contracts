@@ -2,6 +2,7 @@ import { loadFixture } from "@nomicfoundation/hardhat-toolbox/network-helpers";
 import { expect } from "chai";
 import { ethers } from "hardhat";
 
+const lowLiquidityThreshold = ethers.parseEther("0.1");
 const oneEther = ethers.parseEther("1");
 
 describe("Liquidity", function () {
@@ -13,7 +14,7 @@ describe("Liquidity", function () {
         await token.waitForDeployment();
 
         const SUT = await ethers.getContractFactory("LiquidityHarness");
-        const sut = await SUT.deploy(token.target);
+        const sut = await SUT.deploy(lowLiquidityThreshold, token.target);
 
         return {
             sut,
@@ -34,6 +35,12 @@ describe("Liquidity", function () {
             const { sut } = await loadFixture(fixture);
 
             expect(await sut.getMaxExposureNumerator()).to.equal(1000);
+        });
+
+        it("Should set _lowLiquidityThreshold", async function () {
+            const { sut } = await loadFixture(fixture);
+
+            expect(await sut.getLowLiquidityThreshold()).to.equal(lowLiquidityThreshold);
         });
     });
 
@@ -64,6 +71,24 @@ describe("Liquidity", function () {
             await sut.setMaxExposure(2000);
 
             expect(await sut.getMaxExposureNumerator()).to.equal(2000);
+        });
+    });
+
+    describe("setLowLiquidityThreshold", function () {
+        it("Should revert if the caller is not the owner", async function () {
+            const { sut, wallets } = await loadFixture(fixture);
+
+            await expect(sut.connect(wallets.alice).setLowLiquidityThreshold(oneEther))
+                .to.be.revertedWithCustomError(sut, "OwnableUnauthorizedAccount")
+                .withArgs(wallets.alice.address);
+        });
+
+        it("Should set the low liquidity threshold value", async function () {
+            const { sut } = await loadFixture(fixture);
+
+            await sut.setLowLiquidityThreshold(oneEther);
+
+            expect(await sut.getLowLiquidityThreshold()).to.equal(oneEther);
         });
     });
 
@@ -698,16 +723,49 @@ describe("Liquidity", function () {
         it("Should decrease the available liquidity by the amount", async function () {
             const { sut, token, wallets } = await loadFixture(fixture);
 
-            await token.mint(wallets.deployer.address, oneEther);
-            await token.approve(sut.target, oneEther);
+            const deposited = oneEther * 10n;
+            
+            await token.mint(wallets.deployer.address, deposited);
+            await token.approve(sut.target, deposited);
 
             await sut.mockCanChangeLiquidity(true);
 
-            await sut.deposit(oneEther);
+            await sut.deposit(deposited);
 
             await sut.useRoundLiquidity(oneEther / 10n);
 
-            expect(await sut.harnessGetAvailableLiquidity()).to.equal(0n);
+            // available is 10% of 10eth, so 1eth. 1eth - 0.1eth = 0.9eth 
+            expect(await sut.harnessGetAvailableLiquidity()).to.equal(ethers.parseEther("0.9"));
+        });
+
+        it("Should not call _onLowLiquidity when hitting the threshold", async function () {
+            const { sut, token, wallets } = await loadFixture(fixture);
+
+            const deposited = oneEther * 10n;
+
+            await token.mint(wallets.deployer.address, deposited);
+            await token.approve(sut.target, deposited);
+
+            await sut.mockCanChangeLiquidity(true);
+
+            await sut.deposit(deposited);
+
+            await expect(sut.useRoundLiquidity(oneEther - lowLiquidityThreshold)).to.not.emit(sut, "OnLowLiquidity");
+        });
+
+        it("Should call _onLowLiquidity when dropping below the threshold", async function () {
+            const { sut, token, wallets } = await loadFixture(fixture);
+
+            const deposited = oneEther * 10n;
+
+            await token.mint(wallets.deployer.address, deposited);
+            await token.approve(sut.target, deposited);
+
+            await sut.mockCanChangeLiquidity(true);
+
+            await sut.deposit(deposited);
+
+            await expect(sut.useRoundLiquidity(oneEther)).to.emit(sut, "OnLowLiquidity");
         });
     });
 

@@ -12,6 +12,7 @@ contract HashCrashNative is HashCrash, NativeHolder {
         ILootTable lootTable_,
         bytes32 genesisHash_,
         address hashProducer_,
+        uint128 lowLiquidityThreshold_,
         address owner_
-    ) HashCrash(lootTable_, genesisHash_, hashProducer_, owner_) NativeHolder() {}
+    ) HashCrash(lootTable_, genesisHash_, hashProducer_, lowLiquidityThreshold_, owner_) NativeHolder() {}
 }

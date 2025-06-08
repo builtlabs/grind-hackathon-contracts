@@ -4,6 +4,7 @@ import { ethers } from "hardhat";
 import { LootTable } from "../typechain-types";
 import { id } from "ethers";
 
+const lowLiquidityThreshold = ethers.parseEther("0.1");
 const initialBalance = ethers.parseEther("1000");
 const oneEther = ethers.parseEther("1");
 
@@ -49,6 +50,7 @@ describe("HashCrash", function () {
             lootTable.target,
             getHash(genesisSalt),
             deployer.address,
+            lowLiquidityThreshold,
             deployer.address,
             token.target
         );
@@ -205,6 +207,12 @@ describe("HashCrash", function () {
             expect(await sut.owner()).to.equal(config.owner);
         });
 
+        it("Should set the low liquidity threshold", async function () {
+            const { sut } = await loadFixture(baseFixture);
+
+            expect(await sut.getLowLiquidityThreshold()).to.equal(lowLiquidityThreshold);
+        });
+
         it("Should set active to false", async function () {
             const { sut } = await loadFixture(baseFixture);
 
@@ -244,6 +252,7 @@ describe("HashCrash", function () {
                 lootTable.target,
                 config.genesisHash,
                 config.hashProducer,
+                lowLiquidityThreshold,
                 config.owner,
                 token.target
             );

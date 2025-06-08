@@ -12,7 +12,8 @@ contract HashCrashERC20 is HashCrash, ERC20Holder {
         ILootTable lootTable_,
         bytes32 genesisHash_,
         address hashProducer_,
+        uint128 lowLiquidityThreshold_,
         address owner_,
         address token_
-    ) HashCrash(lootTable_, genesisHash_, hashProducer_, owner_) ERC20Holder(token_) {}
+    ) HashCrash(lootTable_, genesisHash_, hashProducer_, lowLiquidityThreshold_, owner_) ERC20Holder(token_) {}
 }

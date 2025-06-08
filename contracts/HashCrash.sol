@@ -69,13 +69,15 @@ abstract contract HashCrash is Liquidity {
     /// @param lootTable_ The loot table to use for the game.
     /// @param genesisHash_ The initial hash for the round.
     /// @param hashProducer_ The address that can produce the next round hash.
+    /// @param lowLiquidityThreshold_ The round liquidity below which we should start the round early.
     /// @param owner_ The owner of the contract.
     constructor(
         ILootTable lootTable_,
         bytes32 genesisHash_,
         address hashProducer_,
+        uint128 lowLiquidityThreshold_,
         address owner_
-    ) Liquidity() Ownable(owner_) {
+    ) Liquidity(lowLiquidityThreshold_) Ownable(owner_) {
         _introBlocks = 20;
         _roundHash = genesisHash_;
         _hashProducer = hashProducer_;

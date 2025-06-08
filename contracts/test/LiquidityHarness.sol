@@ -6,11 +6,16 @@ import { ERC20Holder } from "../currency/ERC20Holder.sol";
 import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
 
 contract LiquidityHarness is Liquidity, ERC20Holder {
+    event OnLowLiquidity();
+
     bool public canChangeLiquidity;
 
     // #######################################################################################
 
-    constructor(address _token) Liquidity() ERC20Holder(_token) Ownable(msg.sender) {}
+    constructor(
+        uint128 lowLiquidityThreshold_,
+        address token_
+    ) Liquidity(lowLiquidityThreshold_) ERC20Holder(token_) Ownable(msg.sender) {}
 
     // #######################################################################################
 
@@ -48,6 +53,11 @@ contract LiquidityHarness is Liquidity, ERC20Holder {
 
     function _canChangeLiquidity() internal view override returns (bool) {
         return canChangeLiquidity;
+    }
+
+    function _onLowLiquidity() internal override {
+        emit OnLowLiquidity();
+        super._onLowLiquidity();
     }
 
     function _readSlot(uint256 _s) private view returns (uint256 result) {
