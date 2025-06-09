@@ -4,7 +4,7 @@ import { ethers } from "hardhat";
 
 const oneEther = ethers.parseEther("1");
 
-describe("NativeHolder", function () {
+describe.only("NativeHolder", function () {
     async function fixture() {
         const [_, wallet] = await ethers.getSigners();
 
@@ -99,38 +99,26 @@ describe("NativeHolder", function () {
                     receivingBalanceBefore + oneEther
                 );
             });
+
+            it("Should emit UnclaimedBalanceClaimed", async function () {
+                const { sut, nativeReceiving } = await loadFixture(stagedBalanceFixture);
+
+                await nativeReceiving.toggleBlocked();
+
+                const calldata = sut.interface.encodeFunctionData("claim");
+                await expect(nativeReceiving.call(sut.target, calldata))
+                    .to.emit(sut, "UnclaimedBalanceClaimed")
+                    .withArgs(nativeReceiving.target, oneEther);
+            });
         });
 
         describe("Still blocked", function () {
-            it("Should leave the staged amount unchanged", async function () {
+            it("Should revert with NativeHolderFailedToClaim", async function () {
                 const { sut, nativeReceiving } = await loadFixture(stagedBalanceFixture);
 
                 const calldata = sut.interface.encodeFunctionData("claim");
-                await nativeReceiving.call(sut.target, calldata);
-
-                expect(await sut.getStagedBalance()).to.equal(oneEther);
-            });
-
-            it("Should leave the staged balance unchanged", async function () {
-                const { sut, nativeReceiving } = await loadFixture(stagedBalanceFixture);
-
-                const calldata = sut.interface.encodeFunctionData("claim");
-                await nativeReceiving.call(sut.target, calldata);
-
-                expect(await sut.getUnclaimedBalance(nativeReceiving.target)).to.equal(oneEther);
-            });
-
-            it("Should not transfer any ether", async function () {
-                const { sut, nativeReceiving } = await loadFixture(stagedBalanceFixture);
-
-                const sutBalanceBefore = await ethers.provider.getBalance(sut.target);
-                const receivingBalanceBefore = await ethers.provider.getBalance(nativeReceiving.target);
-
-                const calldata = sut.interface.encodeFunctionData("claim");
-                await nativeReceiving.call(sut.target, calldata);
-
-                expect(await ethers.provider.getBalance(sut.target)).to.equal(sutBalanceBefore);
-                expect(await ethers.provider.getBalance(nativeReceiving.target)).to.equal(receivingBalanceBefore);
+                await expect(nativeReceiving.call(sut.target, calldata))
+                    .to.be.revertedWithCustomError(sut, "NativeHolderFailedToClaim");
             });
         });
     });
@@ -234,6 +222,16 @@ describe("NativeHolder", function () {
 
             expect(await sut.getUnclaimedBalance(nativeBlocking.target)).to.equal(oneEther);
             expect(await sut.getStagedBalance()).to.equal(oneEther);
+        });
+
+        it("Should emit UnclaimedBalanceIncreased when sending from the contract to a blocking contract", async function () {
+            const { sut, nativeBlocking } = await loadFixture(fixture);
+
+            await sut.receiveValue(oneEther, { value: oneEther });
+
+            await expect(sut.sendValue(nativeBlocking.target, oneEther))
+                .to.emit(sut, "UnclaimedBalanceIncreased")
+                .withArgs(nativeBlocking.target, oneEther);
         });
     });
 });

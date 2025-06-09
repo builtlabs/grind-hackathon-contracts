@@ -6,7 +6,13 @@ import { ValueHolder } from "./ValueHolder.sol";
 /// @title NativeHolder
 /// @notice An implementation of the ValueHolder contract for the native currency.
 contract NativeHolder is ValueHolder {
+    error NativeHolderFailedToClaim();
     error NativeHolderInvalidReceive();
+
+    event UnclaimedBalanceClaimed(address indexed user, uint256 amount);
+    event UnclaimedBalanceIncreased(address indexed user, uint256 amount);
+
+    // #######################################################################################
 
     mapping(address => uint256) private _unclaimedBalances;
 
@@ -29,7 +35,14 @@ contract NativeHolder is ValueHolder {
             _unstageAmount(amount);
 
             // Send the ether without a balance check, as we already checked it in _unstageAmount.
-            _sendEther(msg.sender, amount);
+            (bool success, ) = payable(msg.sender).call{ value: amount }("");
+            if (!success) {
+                // Since this won't harm anyone else, we can safely revert.
+                revert NativeHolderFailedToClaim();
+            }
+
+            // Emit an event for the claimed balance.
+            emit UnclaimedBalanceClaimed(msg.sender, amount);
         }
     }
 
@@ -46,19 +59,16 @@ contract NativeHolder is ValueHolder {
     }
 
     function _sendValue(address _to, uint256 _value) internal override hasAvailableBalance(_value) {
-        _sendEther(_to, _value);
-    }
-
-    // #######################################################################################
-
-    function _sendEther(address _to, uint256 _value) private {
         (bool success, ) = _to.call{ value: _value }("");
         if (!success) {
             // If the transfer fails, we assume the recipient is a contract that does not accept native currency.
             _stageAmount(_value);
+
             unchecked {
                 _unclaimedBalances[_to] += _value;
             }
+
+            emit UnclaimedBalanceIncreased(_to, _value);
         }
     }
 }
