@@ -171,6 +171,7 @@ abstract contract HashCrash is Liquidity {
         if (_isIdle() || startBlock_ >= block.number) {
             blockHashes_ = new bytes32[](0);
         } else {
+            // TODO: We need to clamp this length to the length of the loot table.
             uint64 length = uint64(block.number) - startBlock_;
             blockHashes_ = new bytes32[](length);
 
@@ -328,6 +329,10 @@ abstract contract HashCrash is Liquidity {
             _hashIndex++;
         }
     }
+
+    // TODO: We need a "refund" function incase the hash producer does not reveal in time before the hashes are lost.
+    // Start block to ensure its bytes(0)
+    // ensure the round has at least started
 
     // ########################################################################################
 

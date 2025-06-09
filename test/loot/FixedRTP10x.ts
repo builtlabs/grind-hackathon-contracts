@@ -157,6 +157,7 @@ describe("FixedRTP10x", function () {
 
             const averageEv = evs.reduce((acc, curr) => acc + curr, 0) / evs.length;
 
+            // TODO: Check if this can be one.
             expect(averageEv).to.be.greaterThan(expectedEv - 2);
             expect(averageEv).to.be.lessThan(expectedEv + 2);
 

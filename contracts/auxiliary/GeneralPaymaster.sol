@@ -24,6 +24,8 @@ contract GeneralPaymaster is IPaymaster, Ownable {
     /// @dev By default, all senders are allowed.
     mapping(address => bool) private _fromBlocked;
 
+    // TODO: By default, allow all destinations.
+
     /// @dev By default, all destinations are blocked.
     mapping(address => bool) private _toAllowed;
 
