@@ -107,6 +107,38 @@ describe("PlatformInterface", function () {
         });
     });
 
+    describe("startSeason", function () {
+        it("Should revert if the caller is not the owner", async function () {
+            const { sut, wallets } = await loadFixture(fixture);
+
+            const gamemodes = [wallets.a.address, wallets.b.address, wallets.c.address];
+
+            await expect(sut.connect(wallets.b).startSeason(gamemodes))
+                .to.be.revertedWithCustomError(sut, "OwnableUnauthorizedAccount")
+                .withArgs(wallets.b.address);
+        });
+
+        it("Should emit StartSeason", async function () {
+            const { sut, wallets } = await loadFixture(fixture);
+
+            const nextSeason = await sut.getNextSeason();
+            const gamemodes = [wallets.a.address, wallets.b.address, wallets.c.address];
+
+            await expect(sut.startSeason(gamemodes)).to.emit(sut, "StartSeason").withArgs(nextSeason, gamemodes);
+        });
+
+        it("Should increment the season", async function () {
+            const { sut, wallets } = await loadFixture(fixture);
+
+            const nextSeason = await sut.getNextSeason();
+            const gamemodes = [wallets.a.address, wallets.b.address, wallets.c.address];
+
+            await sut.connect(wallets.deployer).startSeason(gamemodes);
+
+            expect(await sut.getNextSeason()).to.equal(nextSeason + 1n);
+        });
+    });
+
     describe("setPlatform", function () {
         it("Should revert if the caller is not the owner", async function () {
             const { sut, wallets } = await loadFixture(fixture);
@@ -341,6 +373,25 @@ describe("PlatformInterface", function () {
     });
 
     describe("receiveToken", function () {
+        it("Should revert if the value is zero", async function () {
+            const { sut, token } = await loadFixture(fixture);
+
+            await expect(sut.receiveToken(token.target, 0n)).to.be.revertedWithCustomError(sut, "InvalidValueError");
+        });
+
+        it("Should revert if the reward rates aggregate above 100%", async function () {
+            const { sut, token, wallets } = await loadFixture(fixture);
+
+            const source = wallets.g;
+
+            await sut.connect(wallets.deployer).setReferralReward(0, 10000n); // 100%
+
+            await token.mint(source.address, oneEther);
+            await token.connect(source).approve(sut.target, oneEther);
+
+            await expect(sut.connect(source).receiveToken(token.target, oneEther)).to.be.reverted;
+        });
+
         it("Should revert if the token transfer fails", async function () {
             const { sut, token } = await loadFixture(fixture);
 
@@ -427,9 +478,49 @@ describe("PlatformInterface", function () {
                 (oneEther * 8000n) / DENOMINATOR // 80%
             );
         });
+
+        it("Should payout 0% to the platform when the referrer reward is 100%", async function () {
+            const { sut, token, wallets } = await loadFixture(fixture);
+
+            const source = wallets.f;
+
+            await sut.connect(wallets.deployer).setReferralReward(0, 10000n); // 100%
+
+            await token.mint(source.address, oneEther);
+            await token.connect(source).approve(sut.target, oneEther);
+
+            await sut.connect(source).receiveToken(token.target, oneEther);
+
+            expect(await sut.getReward(token.target, wallets.e.address)).to.equal(oneEther); // 100%
+            expect(await sut.getReward(token.target, wallets.platform.address)).to.equal(0n); // 0%
+        });
     });
 
     describe("receive", function () {
+        it("Should revert if the value is zero", async function () {
+            const { sut, token, wallets } = await loadFixture(fixture);
+
+            await expect(
+                wallets.deployer.sendTransaction({
+                    to: sut.target,
+                    value: 0n,
+                })
+            ).to.be.revertedWithCustomError(sut, "InvalidValueError");
+        });
+
+        it("Should revert if the reward rates aggregate above 100%", async function () {
+            const { sut, wallets } = await loadFixture(fixture);
+
+            const source = wallets.g;
+
+            await sut.connect(wallets.deployer).setReferralReward(0, 10000n); // 100%
+
+            await expect(source.sendTransaction({
+                to: sut.target,
+                value: oneEther,
+            })).to.be.reverted;
+        });
+
         it("Should payout 100% to the platform with 0 length referrer chain", async function () {
             const { sut, wallets } = await loadFixture(fixture);
 
@@ -504,6 +595,22 @@ describe("PlatformInterface", function () {
             expect(await sut.getReward(NATIVE, wallets.platform.address)).to.equal(
                 (oneEther * 8000n) / DENOMINATOR // 80%
             );
+        });
+
+        it("Should payout 0% to the platform when the referrer reward is 100%", async function () {
+            const { sut, wallets } = await loadFixture(fixture);
+
+            const source = wallets.f;
+
+            await sut.connect(wallets.deployer).setReferralReward(0, 10000n); // 100%
+
+            await source.sendTransaction({
+                to: sut.target,
+                value: oneEther,
+            });
+
+            expect(await sut.getReward(NATIVE, wallets.e.address)).to.equal(oneEther); // 100%
+            expect(await sut.getReward(NATIVE, wallets.platform.address)).to.equal(0n); // 0%
         });
     });
 });
