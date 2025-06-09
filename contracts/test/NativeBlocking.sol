@@ -15,7 +15,7 @@ contract NativeBlocking {
                     revert(add(data, 32), mload(data))
                 }
             } else {
-                revert("Bet failed with no reason");
+                revert("Call failed with no reason");
             }
         }
     }

@@ -6,7 +6,7 @@ import { ethers } from "hardhat";
 const lowLiquidityThreshold = ethers.parseEther("0.1");
 
 function getHash(salt: string) {
-    return ethers.keccak256(ethers.toUtf8Bytes(salt));
+    return ethers.keccak256(ethers.solidityPacked(["bytes32"], [salt]));
 }
 
 describe("HashCrashERC20", function () {

@@ -19,10 +19,6 @@ contract LiquidityHarness is Liquidity, ERC20Holder {
 
     // #######################################################################################
 
-    function harnessGetStagedBalance() external view returns (uint256) {
-        return _readSlot(2);
-    }
-
     function harnessGetAvailableLiquidity() external view returns (uint256) {
         return _getRoundLiquidity();
     }
@@ -58,11 +54,5 @@ contract LiquidityHarness is Liquidity, ERC20Holder {
     function _onLowLiquidity() internal override {
         emit OnLowLiquidity();
         super._onLowLiquidity();
-    }
-
-    function _readSlot(uint256 _s) private view returns (uint256 result) {
-        assembly {
-            result := sload(_s)
-        }
     }
 }

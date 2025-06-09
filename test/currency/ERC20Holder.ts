@@ -36,7 +36,7 @@ describe("ERC20Holder", function () {
         it("Should initially return 0", async function () {
             const { sut } = await loadFixture(fixture);
 
-            expect(await sut.balance()).to.equal(0);
+            expect(await sut.getBalance()).to.equal(0);
         });
 
         it("Should return the contract token balance", async function () {
@@ -44,7 +44,7 @@ describe("ERC20Holder", function () {
 
             await token.mint(sut.target, oneEther);
 
-            expect(await sut.balance()).to.equal(oneEther);
+            expect(await sut.getBalance()).to.equal(oneEther);
         });
     });
 
@@ -112,11 +112,10 @@ describe("ERC20Holder", function () {
         });
 
         it("Should revert if the contract has insufficient funds", async function () {
-            const { sut, token, wallet } = await loadFixture(fixture);
+            const { sut, wallet } = await loadFixture(fixture);
 
             await expect(sut.sendValue(wallet.address, oneEther))
-                .to.be.revertedWithCustomError(token, "ERC20InsufficientBalance")
-                .withArgs(sut.target, 0, oneEther);
+                .to.be.revertedWithCustomError(sut, "ValueHolderInsufficientAvailableBalance");
         });
 
         it("Should send the token from the contract to the wallet", async function () {

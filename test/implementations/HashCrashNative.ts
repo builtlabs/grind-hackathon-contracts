@@ -1,12 +1,13 @@
-import { loadFixture } from "@nomicfoundation/hardhat-toolbox/network-helpers";
+import { loadFixture, mine } from "@nomicfoundation/hardhat-toolbox/network-helpers";
 import { expect } from "chai";
 import { id } from "ethers";
 import { ethers } from "hardhat";
 
 const lowLiquidityThreshold = ethers.parseEther("0.1");
+const oneEther = ethers.parseEther("1");
 
 function getHash(salt: string) {
-    return ethers.keccak256(ethers.toUtf8Bytes(salt));
+    return ethers.keccak256(ethers.solidityPacked(["bytes32"], [salt]));
 }
 
 describe("HashCrashNative", function () {
@@ -15,18 +16,30 @@ describe("HashCrashNative", function () {
 
         const genesisSalt = ethers.hexlify(ethers.randomBytes(32));
 
+        const NativeBlocking = await ethers.getContractFactory("NativeBlocking");
+        const nativeBlocking = await NativeBlocking.deploy();
+        await nativeBlocking.waitForDeployment();
+
         const FixedRTP10x = await ethers.getContractFactory("FixedRTP10x");
         const lootTable = await FixedRTP10x.deploy();
         await lootTable.waitForDeployment();
 
         const HASHCRASH = await ethers.getContractFactory("HashCrashNative");
-        const sut = await HASHCRASH.deploy(lootTable.target, getHash(genesisSalt), deployer.address, lowLiquidityThreshold, deployer.address);
+        const sut = await HASHCRASH.deploy(
+            lootTable.target,
+            getHash(genesisSalt),
+            deployer.address,
+            lowLiquidityThreshold,
+            deployer.address
+        );
         await sut.waitForDeployment();
 
         return {
             sut,
             lootTable,
+            nativeBlocking,
             config: {
+                introBlocks: 20,
                 genesisSalt,
                 genesisHash: getHash(genesisSalt),
                 hashProducer: deployer.address,
@@ -76,7 +89,7 @@ describe("HashCrashNative", function () {
         it("Should set the hash producer", async function () {
             const { sut, config } = await loadFixture(fixture);
 
-            expect( await sut.getHashProducer()).to.equal(config.hashProducer);
+            expect(await sut.getHashProducer()).to.equal(config.hashProducer);
         });
 
         it("Should set the loot table", async function () {
@@ -107,6 +120,31 @@ describe("HashCrashNative", function () {
                 .map((log) => iface.decodeEventLog("LootTableUpdated", log.data, log.topics));
 
             expect(events).to.deep.include.members([[lootTable.target]]);
+        });
+    });
+
+    describe("integrations", function () {
+        it("Should not get bricked by a malicious winner", async function () {
+            const { sut, nativeBlocking, config } = await loadFixture(fixture);
+
+            const liquidity = oneEther * 100n;
+
+            await sut.deposit(liquidity, { value: liquidity });
+            await sut.setActive(true);
+
+            const LootTable = await ethers.getContractFactory("NoDeathTable");
+            const lootTable = await LootTable.deploy();
+            await lootTable.waitForDeployment();
+
+            await sut.setLootTable(lootTable.target);
+
+            const calldata = sut.interface.encodeFunctionData("placeBet", [oneEther, 3]);
+            await nativeBlocking.call(sut.target, calldata, { value: oneEther });
+
+            const length = await lootTable.getLength();
+            await mine(config.introBlocks + Number(length));
+
+            await expect(sut.reveal(config.genesisSalt, ethers.hexlify(ethers.randomBytes(32)))).to.not.be.reverted;
         });
     });
 });

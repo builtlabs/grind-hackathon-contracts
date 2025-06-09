@@ -6,6 +6,10 @@ import { ERC20Holder } from "../currency/ERC20Holder.sol";
 contract ERC20HolderHarness is ERC20Holder {
     constructor(address token_) ERC20Holder(token_) {}
 
+    function getBalance() external view returns (uint256) {
+        return _getBalance();
+    }
+
     function receiveValue(address _from, uint256 _value) external {
         _receiveValue(_from, _value);
     }

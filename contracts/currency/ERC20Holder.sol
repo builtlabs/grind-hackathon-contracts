@@ -33,7 +33,7 @@ contract ERC20Holder is ValueHolder {
         SafeERC20.safeTransferFrom(_token, _from, address(this), _value);
     }
 
-    function _sendValue(address _to, uint256 _value) internal override {
+    function _sendValue(address _to, uint256 _value) internal override hasAvailableBalance(_value) {
         SafeERC20.safeTransfer(_token, _to, _value);
     }
 }

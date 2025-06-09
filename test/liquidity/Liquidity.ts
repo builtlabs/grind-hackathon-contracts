@@ -204,7 +204,7 @@ describe("Liquidity", function () {
 
                 await sut.deposit(oneEther);
 
-                expect(await sut.harnessGetStagedBalance()).to.equal(oneEther);
+                expect(await sut.getStagedBalance()).to.equal(oneEther);
             });
 
             it("Should emit LiquidityChangeQueued", async function () {

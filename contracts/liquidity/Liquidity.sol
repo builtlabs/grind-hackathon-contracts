@@ -29,12 +29,11 @@ abstract contract Liquidity is ValueHolder, Ownable {
     // #######################################################################################
 
     LiquidityDelta[] private _liquidityQueue;
-    uint256 private _stagedBalance;
+    uint256 private _availableLiquidity;
 
     mapping(address => uint256) private _userShares;
     uint256 private _totalShares;
 
-    uint256 private _availableLiquidity;
     uint128 private _maxExposureNumerator;
     uint128 private _lowLiquidityThreshold;
 
@@ -104,20 +103,19 @@ abstract contract Liquidity is ValueHolder, Ownable {
     /// @notice Either deposits, or queues a deposit of the given amount by the sender.
     /// @param _amount The amount to deposit, must be greater than zero.
     function deposit(uint256 _amount) external payable notZero(_amount) {
+        // Standardize behavior between native and ERC20 deposits.
         _receiveValue(msg.sender, _amount);
+
+        // We stage because this amount should not become available until the deposit is processed.
+        _stageAmount(_amount);
 
         // If the contract can change liquidity immediately, add the liquidity.
         if (_canChangeLiquidity()) {
-            _addLiquidity(msg.sender, _amount, _getBalance() - _amount);
+            _addLiquidity(msg.sender, _amount, _getAvailableBalance());
             _resetLiquidity();
         } else {
             // Otherwise, queue the liquidity change.
             _queueLiquidityChange(0, _amount);
-
-            // This balance needs to be ignored when applying the queued changes.
-            unchecked {
-                _stagedBalance += _amount;
-            }
         }
     }
 
@@ -126,7 +124,7 @@ abstract contract Liquidity is ValueHolder, Ownable {
     function withdraw(uint256 _amount) external notZero(_amount) {
         // If the contract can change liquidity immediately, remove the liquidity.
         if (_canChangeLiquidity()) {
-            if (_removeLiquidity(msg.sender, _amount, _getBalance()) == 0) {
+            if (_removeLiquidity(msg.sender, _amount, _getAvailableBalance()) == 0) {
                 revert InsufficientShares();
             }
 
@@ -144,9 +142,8 @@ abstract contract Liquidity is ValueHolder, Ownable {
     }
 
     function _clearLiquidityQueue() internal {
-        // Offset the staged balance from the current balance to ensure fair share distribution.
-        uint256 _balance = _getBalance() - _stagedBalance;
-        _stagedBalance = 0;
+        // Cache the available balance to avoid multiple calls to _getAvailableBalance.
+        uint256 _balance = _getAvailableBalance();
 
         for (uint256 i = 0; i < _liquidityQueue.length; i++) {
             LiquidityDelta memory delta = _liquidityQueue[i];
@@ -209,6 +206,9 @@ abstract contract Liquidity is ValueHolder, Ownable {
             _totalShares += newShares;
         }
 
+        // The liquidity has been processed, so we can make the amount available.
+        _unstageAmount(_amount);
+
         emit LiquidityAdded(_user, _amount, newShares);
     }
 
@@ -233,6 +233,6 @@ abstract contract Liquidity is ValueHolder, Ownable {
 
     function _resetLiquidity() private {
         // The available liquidity is recalculated based on the current balance and the maximum exposure.
-        _availableLiquidity = (_getBalance() * _maxExposureNumerator) / _DENOMINATOR;
+        _availableLiquidity = (_getAvailableBalance() * _maxExposureNumerator) / _DENOMINATOR;
     }
 }

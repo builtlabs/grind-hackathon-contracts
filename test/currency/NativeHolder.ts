@@ -29,11 +29,117 @@ describe("NativeHolder", function () {
 
     // ############################ TESTS ############################
 
+    describe("claim", function () {
+        async function stagedBalanceFixture() {
+            const { sut, nativeReceiving, wallet } = await fixture();
+
+            const calldata = sut.interface.encodeFunctionData("receiveValue", [oneEther]);
+            await nativeReceiving.call(sut.target, calldata, { value: oneEther });
+
+            await nativeReceiving.toggleBlocked();
+
+            await sut.sendValue(nativeReceiving.target, oneEther);
+
+            expect(await sut.getStagedBalance()).to.equal(oneEther);
+            expect(await sut.getUnclaimedBalance(nativeReceiving.target)).to.equal(oneEther);
+
+            return { sut, nativeReceiving, wallet };
+        }
+
+        it("Should do nothing if the unclaimed balance is zero", async function () {
+            const { sut, wallet } = await loadFixture(fixture);
+
+            const stagedBalanceBefore = await sut.getStagedBalance();
+            const availableBalanceBefore = await sut.getAvailableBalance();
+            const unclaimedBalanceBefore = await sut.getUnclaimedBalance(wallet.address);
+
+            await sut.claim();
+
+            expect(await sut.getStagedBalance()).to.equal(stagedBalanceBefore);
+            expect(await sut.getAvailableBalance()).to.equal(availableBalanceBefore);
+            expect(await sut.getUnclaimedBalance(wallet.address)).to.equal(unclaimedBalanceBefore);
+        });
+
+        describe("unblocked", function () {
+            it("Should reduce the staged amount", async function () {
+                const { sut, nativeReceiving } = await loadFixture(stagedBalanceFixture);
+
+                await nativeReceiving.toggleBlocked();
+
+                const calldata = sut.interface.encodeFunctionData("claim");
+                await nativeReceiving.call(sut.target, calldata);
+
+                expect(await sut.getStagedBalance()).to.equal(0);
+            });
+
+            it("Should delete the staged balance", async function () {
+                const { sut, nativeReceiving } = await loadFixture(stagedBalanceFixture);
+
+                await nativeReceiving.toggleBlocked();
+
+                const calldata = sut.interface.encodeFunctionData("claim");
+                await nativeReceiving.call(sut.target, calldata);
+
+                expect(await sut.getUnclaimedBalance(nativeReceiving.target)).to.equal(0);
+            });
+
+            it("Should transfer the ether", async function () {
+                const { sut, nativeReceiving } = await loadFixture(stagedBalanceFixture);
+
+                await nativeReceiving.toggleBlocked();
+
+                const sutBalanceBefore = await ethers.provider.getBalance(sut.target);
+                const receivingBalanceBefore = await ethers.provider.getBalance(nativeReceiving.target);
+
+                const calldata = sut.interface.encodeFunctionData("claim");
+                await nativeReceiving.call(sut.target, calldata);
+
+                expect(await ethers.provider.getBalance(sut.target)).to.equal(sutBalanceBefore - oneEther);
+                expect(await ethers.provider.getBalance(nativeReceiving.target)).to.equal(
+                    receivingBalanceBefore + oneEther
+                );
+            });
+        });
+
+        describe("Still blocked", function () {
+            it("Should leave the staged amount unchanged", async function () {
+                const { sut, nativeReceiving } = await loadFixture(stagedBalanceFixture);
+
+                const calldata = sut.interface.encodeFunctionData("claim");
+                await nativeReceiving.call(sut.target, calldata);
+
+                expect(await sut.getStagedBalance()).to.equal(oneEther);
+            });
+
+            it("Should leave the staged balance unchanged", async function () {
+                const { sut, nativeReceiving } = await loadFixture(stagedBalanceFixture);
+
+                const calldata = sut.interface.encodeFunctionData("claim");
+                await nativeReceiving.call(sut.target, calldata);
+
+                expect(await sut.getUnclaimedBalance(nativeReceiving.target)).to.equal(oneEther);
+            });
+
+            it("Should not transfer any ether", async function () {
+                const { sut, nativeReceiving } = await loadFixture(stagedBalanceFixture);
+
+                const sutBalanceBefore = await ethers.provider.getBalance(sut.target);
+                const receivingBalanceBefore = await ethers.provider.getBalance(nativeReceiving.target);
+
+                const calldata = sut.interface.encodeFunctionData("claim");
+                await nativeReceiving.call(sut.target, calldata);
+
+                expect(await ethers.provider.getBalance(sut.target)).to.equal(sutBalanceBefore);
+                expect(await ethers.provider.getBalance(nativeReceiving.target)).to.equal(receivingBalanceBefore);
+            });
+        });
+    });
+
     describe("_getBalance", function () {
         it("Should initially return 0", async function () {
             const { sut } = await loadFixture(fixture);
 
-            expect(await sut.balance()).to.equal(0);
+            expect(await sut.getBalance()).to.equal(0);
         });
 
         it("Should return the contract token balance", async function () {
@@ -41,7 +147,7 @@ describe("NativeHolder", function () {
 
             await sut.receiveValue(oneEther, { value: oneEther });
 
-            expect(await sut.balance()).to.equal(oneEther);
+            expect(await sut.getBalance()).to.equal(oneEther);
         });
     });
 
@@ -62,8 +168,8 @@ describe("NativeHolder", function () {
             const tx = await sut.connect(wallet).receiveValue(oneEther, { value: oneEther });
             const receipt = await tx.wait();
 
-            let fee = 0n
-            if(receipt) {
+            let fee = 0n;
+            if (receipt) {
                 fee = receipt.fee;
             }
 
@@ -78,22 +184,11 @@ describe("NativeHolder", function () {
 
             await expect(sut.sendValue(wallet.address, oneEther)).to.be.revertedWithCustomError(
                 sut,
-                "NativeHolderTransferFailed"
+                "ValueHolderInsufficientAvailableBalance"
             );
         });
 
-        it("Should revert if sending to a contract with no receive", async function () {
-            const { sut, nativeBlocking } = await loadFixture(fixture);
-
-            await sut.receiveValue(oneEther, { value: oneEther });
-
-            await expect(sut.sendValue(nativeBlocking.target, oneEther)).to.be.revertedWithCustomError(
-                sut,
-                "NativeHolderTransferFailed"
-            );
-        });
-
-        it("Should send the token from the contract to the wallet", async function () {
+        it("Should send the eth from the contract to the wallet", async function () {
             const { sut, wallet } = await loadFixture(fixture);
 
             await sut.receiveValue(oneEther, { value: oneEther });
@@ -108,7 +203,7 @@ describe("NativeHolder", function () {
             expect(await provider.getBalance(sut.target)).to.equal(sutBalanceBefore - oneEther);
         });
 
-        it("Should send the token from the contract to another contract", async function () {
+        it("Should send the eth from the contract to another contract", async function () {
             const { sut, nativeReceiving } = await loadFixture(fixture);
 
             await sut.receiveValue(oneEther, { value: oneEther });
@@ -120,7 +215,25 @@ describe("NativeHolder", function () {
             await sut.sendValue(nativeReceiving.target, oneEther);
 
             expect(await provider.getBalance(nativeReceiving.target)).to.equal(contractBalanceBefore + oneEther);
-            expect(await provider.getBalance(sut.target)).to.equal(sutBalanceBefore - oneEther);
+            expect(await sut.getAvailableBalance()).to.equal(sutBalanceBefore - oneEther);
+        });
+
+        it("Should stage the eth when sending from the contract to a blocking contract", async function () {
+            const { sut, nativeBlocking } = await loadFixture(fixture);
+
+            await sut.receiveValue(oneEther, { value: oneEther });
+
+            const provider = ethers.provider;
+            const contractBalanceBefore = await provider.getBalance(nativeBlocking.target);
+            const sutBalanceBefore = await provider.getBalance(sut.target);
+
+            await sut.sendValue(nativeBlocking.target, oneEther);
+
+            expect(await provider.getBalance(nativeBlocking.target)).to.equal(contractBalanceBefore);
+            expect(await sut.getAvailableBalance()).to.equal(sutBalanceBefore - oneEther);
+
+            expect(await sut.getUnclaimedBalance(nativeBlocking.target)).to.equal(oneEther);
+            expect(await sut.getStagedBalance()).to.equal(oneEther);
         });
     });
 });
