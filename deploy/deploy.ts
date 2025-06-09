@@ -3,10 +3,8 @@ import { vars } from "hardhat/config";
 import { HardhatRuntimeEnvironment } from "hardhat/types";
 import { Contract, HDNodeWallet } from "ethers";
 
-import { Wallet } from "zksync-ethers";
+import { Provider, Wallet } from "zksync-ethers";
 import { Deployer } from "@matterlabs/hardhat-zksync";
-
-const initialBalance = ethers.parseEther("100000");
 
 interface Verify {
     address: string;
@@ -21,29 +19,33 @@ const toVerify: Verify[] = [];
 export default async function (runtime: HardhatRuntimeEnvironment) {
     console.log(`Running deploy script`, runtime.network.name);
 
-    const wallet = new Wallet(vars.get(runtime.network.name === "abstractTestnet" ? "DEV_PRIVATE_KEY" : "PRIVATE_KEY"));
+    const zkProvider = new Provider("https://api.testnet.abs.xyz");
+
+    const wallet = new Wallet(vars.get(runtime.network.name === "abstractTestnet" ? "DEV_PRIVATE_KEY" : "PRIVATE_KEY"), zkProvider);
     const deployer = new Deployer(runtime, wallet);
 
     console.log(`Using wallet: ${wallet.address}`);
 
-    const platformInterface = await deploy(deployer, "PlatformInterface", [platform, wallet.address]);
-    
     const seed = vars.get(runtime.network.name === "abstractTestnet" ? "DEV_SEED" : "SEED");
-
     const ethGenesisHash = getHash(getSalt(seed, 0, 0));
 
+    const platformInterface = await deploy(deployer, "PlatformInterface", [platform, wallet.address]);
     const fixedRTP10x = await deploy(deployer, "FixedRTP10x", []);
 
+    const minLiquidityEth = ethers.parseEther("0.01").toString();
     const hashCrash = await deploy(deployer, "HashCrashNative", [
         fixedRTP10x.target,
         ethGenesisHash,
         revealer,
+        minLiquidityEth,
         wallet.address,
     ]);
 
+    await tx(hashCrash.deposit(ethers.parseEther("0.2"), { value: ethers.parseEther("0.2") }));
     await tx(hashCrash.setActive(true));
 
     const gamemodes = [hashCrash.target];
+    const validTargets = [hashCrash.target, platformInterface.target];
 
     if (runtime.network.name === "abstractTestnet") {
         const grindGenesisHash = getHash(getSalt(seed, 1, 0));
@@ -52,21 +54,34 @@ export default async function (runtime: HardhatRuntimeEnvironment) {
 
         const grind = await deploy(deployer, "DemoERC20", []);
 
+        const minLiquidityGrind = ethers.parseEther("1000").toString();
         const grindCrash = await deploy(deployer, "HashCrashERC20", [
             fixedRTP100x.target,
             grindGenesisHash,
             revealer,
+            minLiquidityGrind,
             wallet.address,
             grind.target,
         ]);
 
         gamemodes.push(grindCrash.target);
+        validTargets.push(grindCrash.target);
+        validTargets.push(grind.target);
 
+        const initialBalance = ethers.parseEther("100000");
         await tx(grind.mint(wallet.address, initialBalance));
         await tx(grind.approve(await grindCrash.getAddress(), initialBalance));
         await tx(grindCrash.deposit(initialBalance));
         await tx(grindCrash.setActive(true));
     }
+
+    const paymaster = await deploy(deployer, "GeneralPaymaster", [validTargets, wallet.address]);
+    await tx(
+        wallet.sendTransaction({
+            to: paymaster.target,
+            value: ethers.parseEther("0.1"),
+        })
+    );
 
     await tx(platformInterface.startSeason(gamemodes));
 
