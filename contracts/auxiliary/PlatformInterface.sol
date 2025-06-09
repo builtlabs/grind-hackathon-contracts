@@ -6,6 +6,7 @@ import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import { SafeERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
 /// @title PlatformInterface
+/// @author BuiltByFrancis
 /// @notice A generic contract used for fee collection, referral, and reward distribution.
 contract PlatformInterface is Ownable {
     uint256 private constant DENOMINATOR = 10000;

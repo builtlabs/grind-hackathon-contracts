@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
+import { ValueHolder } from "./ValueHolder.sol";
+
 import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import { SafeERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import { ValueHolder } from "./ValueHolder.sol";
 
 /// @title ERC20Holder
 /// @notice An implementation of the ValueHolder contract for a given ERC20 token.
