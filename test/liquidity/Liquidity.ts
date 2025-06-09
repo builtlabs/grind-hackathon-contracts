@@ -162,7 +162,7 @@ describe("Liquidity", function () {
                     .withArgs(wallets.deployer.address, oneEther, oneEther);
             });
 
-            it("Should clearLiquidityQueue the _available liquidity", async function () {
+            it("Should reset the _available liquidity", async function () {
                 const { sut, token, wallets } = await loadFixture(fixture);
 
                 await token.mint(wallets.deployer.address, oneEther);
@@ -263,6 +263,10 @@ describe("Liquidity", function () {
 
                 await sut.deposit(oneEther);
                 await sut.withdraw(oneEther / 4n);
+
+                expect(await sut.getShares(wallets.deployer.address)).to.equal((oneEther / 4n) * 3n);
+                expect(await sut.getTotalShares()).to.equal((oneEther / 4n) * 3n);
+
                 await sut.withdraw((oneEther / 4n) * 3n);
 
                 expect(await sut.getShares(wallets.deployer.address)).to.equal(0);
@@ -284,7 +288,7 @@ describe("Liquidity", function () {
                     .withArgs(wallets.deployer.address, oneEther, oneEther);
             });
 
-            it("Should clearLiquidityQueue the _available liquidity", async function () {
+            it("Should reset the _available liquidity", async function () {
                 const { sut, token, wallets } = await loadFixture(fixture);
 
                 await token.mint(wallets.deployer.address, oneEther);
