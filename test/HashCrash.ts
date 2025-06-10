@@ -199,6 +199,14 @@ describe("HashCrash", function () {
         return { sut, lootTable, token, wallets, config: { ...config, deadIndex } };
     }
 
+    async function unrecoverableRoundFixture() {
+        const fixture = await completedBetFixture();
+
+        await mine(1000);
+
+        return fixture;
+    }
+
     // ############################ TESTS ############################
 
     describe("constructor", function () {
@@ -1098,7 +1106,7 @@ describe("HashCrash", function () {
         });
 
         it("Should payout winning bets", async function () {
-            const { sut, lootTable, token, wallets, config } = await loadFixture(predictableDeathTable);
+            const { sut, lootTable, token, config } = await loadFixture(predictableDeathTable);
 
             const length = Number(await lootTable.getLength());
 
@@ -1126,7 +1134,7 @@ describe("HashCrash", function () {
         });
 
         it("Should payout winning bets when there is no dead block", async function () {
-            const { sut, lootTable, token, wallets, config } = await loadFixture(noDeathTable);
+            const { sut, lootTable, token, config } = await loadFixture(noDeathTable);
 
             const length = Number(await lootTable.getLength());
 
@@ -1156,7 +1164,7 @@ describe("HashCrash", function () {
         });
 
         it("Should ignore cancelled bets", async function () {
-            const { sut, lootTable, token, wallets, config } = await loadFixture(predictableDeathTable);
+            const { sut, lootTable, token, config } = await loadFixture(predictableDeathTable);
 
             const cancelToExc = 2;
             const length = Number(await lootTable.getLength());
@@ -1189,7 +1197,7 @@ describe("HashCrash", function () {
         });
 
         it("Should ignore dead bets", async function () {
-            const { sut, lootTable, token, wallets, config } = await loadFixture(predictableDeathTable);
+            const { sut, lootTable, token, config } = await loadFixture(predictableDeathTable);
 
             const length = Number(await lootTable.getLength());
 
@@ -1214,6 +1222,11 @@ describe("HashCrash", function () {
 
             const info = await sut.getRoundInfo();
             expect(info[4].length).to.equal(config.bets.length);
+
+            await sut.reveal(config.genesisSalt, nextHash);
+
+            const newInfo = await sut.getRoundInfo();
+            expect(newInfo[4].length).to.equal(0);
         });
 
         it("Should clear the liquidity queue", async function () {
@@ -1263,6 +1276,157 @@ describe("HashCrash", function () {
             const previous = (await sut.getRoundInfo())[0];
 
             await sut.reveal(config.genesisSalt, nextHash);
+
+            expect((await sut.getRoundInfo())[0]).to.equal(previous + 1n);
+        });
+    });
+
+    describe("refund", function () {
+        const nextHash = ethers.hexlify(ethers.randomBytes(32));
+
+        it("Should revert if the caller is not the hash producer", async function () {
+            const { sut, wallets, config } = await loadFixture(unrecoverableRoundFixture);
+
+            await expect(sut.connect(wallets.alice).refund(config.genesisSalt, nextHash)).to.be.revertedWithCustomError(
+                sut,
+                "NotHashProducerError"
+            );
+        });
+
+        it("Should revert if the hash does not match the salt", async function () {
+            const { sut } = await loadFixture(unrecoverableRoundFixture);
+
+            await expect(sut.refund(ethers.hexlify(ethers.randomBytes(32)), nextHash)).to.be.revertedWithCustomError(
+                sut,
+                "InvalidHashError"
+            );
+        });
+
+        it("Should revert if the round has not started yet", async function () {
+            const { sut, config } = await loadFixture(baseFixture);
+
+            await expect(sut.refund(config.genesisSalt, nextHash)).to.be.revertedWithCustomError(
+                sut,
+                "RoundNotRefundableError"
+            );
+        });
+
+        it("Should revert if the round can still be revealed", async function () {
+            const { sut, config } = await loadFixture(completedBetFixture);
+
+            await expect(sut.refund(config.genesisSalt, nextHash)).to.be.revertedWithCustomError(
+                sut,
+                "RoundNotRefundableError"
+            );
+        });
+
+        it("Should refund non-cancelled bets", async function () {
+            const { sut, token, config } = await loadFixture(predictableDeathTable);
+
+            await mine(1000);
+
+            const sutBalanceBefore = await token.balanceOf(sut.target);
+            const beforeBalances = await Promise.all(config.bets.map((b) => token.balanceOf(b.wallet.address)));
+
+            await sut.refund(config.genesisSalt, nextHash);
+
+            let sum = 0n;
+            for (let i = 0; i < config.bets.length; i++) {
+                expect(await token.balanceOf(config.bets[i].wallet.address)).to.equal(
+                    beforeBalances[i] + config.bets[i].amount
+                );
+                sum += config.bets[i].amount;
+            }
+
+            expect(await token.balanceOf(sut.target)).to.equal(sutBalanceBefore - sum);
+        });
+
+        it("Should ignore cancelled bets", async function () {
+            const { sut, token, config } = await loadFixture(predictableDeathTable);
+
+            const cancelToExc = 2;
+
+            for (let i = 0; i < cancelToExc; i++) {
+                await sut.connect(config.bets[i].wallet).cancelBet(i);
+            }
+
+            await mine(1000);
+
+            const sutBalanceBefore = await token.balanceOf(sut.target);
+            const beforeBalances = await Promise.all(config.bets.map((b) => token.balanceOf(b.wallet.address)));
+
+            await sut.refund(config.genesisSalt, nextHash);
+
+            let sum = 0n;
+            for (let i = cancelToExc; i < config.bets.length; i++) {
+                expect(await token.balanceOf(config.bets[i].wallet.address)).to.equal(
+                    beforeBalances[i] + config.bets[i].amount
+                );
+                sum += config.bets[i].amount;
+            }
+
+            expect(await token.balanceOf(sut.target)).to.equal(sutBalanceBefore - sum);
+        });
+
+        it("Should clear the bets", async function () {
+            const { sut, config } = await loadFixture(unrecoverableRoundFixture);
+
+            const info = await sut.getRoundInfo();
+            expect(info[4].length).to.equal(config.bets.length);
+
+            await sut.refund(config.genesisSalt, nextHash);
+
+            const newInfo = await sut.getRoundInfo();
+            expect(newInfo[4].length).to.equal(0);
+        });
+
+        it("Should clear the liquidity queue", async function () {
+            const { sut, config } = await loadFixture(unrecoverableRoundFixture);
+
+            await sut.deposit(oneEther);
+            await sut.withdraw(oneEther);
+
+            const liquidityQueue = await sut.getLiquidityQueue();
+            expect(liquidityQueue.length).to.equal(2);
+
+            await sut.refund(config.genesisSalt, nextHash);
+
+            const newLiquidityQueue = await sut.getLiquidityQueue();
+            expect(newLiquidityQueue.length).to.equal(0);
+        });
+
+        it("Should emit RoundRefunded", async function () {
+            const { sut, config } = await loadFixture(unrecoverableRoundFixture);
+
+            await expect(sut.refund(config.genesisSalt, nextHash))
+                .to.emit(sut, "RoundRefunded")
+                .withArgs(config.genesisHash, config.genesisSalt);
+        });
+
+        it("Should reset the round start block", async function () {
+            const { sut, config } = await loadFixture(unrecoverableRoundFixture);
+
+            await sut.refund(config.genesisSalt, nextHash);
+
+            const roundInfo = await sut.getRoundInfo();
+            expect(roundInfo[1]).to.equal(0);
+        });
+
+        it("Should set the new round hash", async function () {
+            const { sut, config } = await loadFixture(unrecoverableRoundFixture);
+
+            await sut.refund(config.genesisSalt, nextHash);
+
+            const roundInfo = await sut.getRoundInfo();
+            expect(roundInfo[3]).to.equal(nextHash);
+        });
+
+        it("Should increment the hashIndex", async function () {
+            const { sut, config } = await loadFixture(unrecoverableRoundFixture);
+
+            const previous = (await sut.getRoundInfo())[0];
+
+            await sut.refund(config.genesisSalt, nextHash);
 
             expect((await sut.getRoundInfo())[0]).to.equal(previous + 1n);
         });

@@ -22,11 +22,14 @@ abstract contract HashCrash is Liquidity {
     error InvalidHashError();
     error InvalidCashoutIndexError();
 
+    error RoundNotRefundableError();
+
     // #######################################################################################
 
     event RoundStarted(bytes32 indexed roundHash, uint64 startBlock, uint64 hashIndex);
     event RoundAccelerated(bytes32 indexed roundHash, uint64 startBlock);
     event RoundEnded(bytes32 indexed roundHash, bytes32 roundSalt, uint64 deadIndex);
+    event RoundRefunded(bytes32 indexed roundHash, bytes32 roundSalt);
 
     event BetPlaced(bytes32 indexed roundHash, address indexed user, uint256 amount, uint64 cashoutIndex);
     event BetCashoutUpdated(bytes32 indexed roundHash, uint256 indexed index, uint64 cashoutIndex);
@@ -315,7 +318,7 @@ abstract contract HashCrash is Liquidity {
         emit BetCashoutUpdated(_roundHash, _index, blockIndex);
     }
 
-    /// @notice Reveals the round result and processes the bets. Can only be called by the hash producer.
+    /// @notice Reveals the round result and processes the bets.
     /// @param _salt The salt used to generate the round hash.
     /// @param _nextHash The hash for the next round.
     function reveal(bytes32 _salt, bytes32 _nextHash) external onlyHashProducer {
@@ -335,9 +338,26 @@ abstract contract HashCrash is Liquidity {
         }
     }
 
-    // TODO: We need a "refund" function incase the hash producer does not reveal in time before the hashes are lost.
-    // Start block to ensure its bytes(0)
-    // ensure the round has at least started
+    /// @notice Refunds the round.
+    /// @param _salt The salt used to generate the round hash.
+    /// @param _nextHash The hash for the next round.
+    /// @dev This can only be called in an emergency situation, where the reveal has been delayed and it is no longer possible for the chain to access the round blockhashes.
+    function refund(bytes32 _salt, bytes32 _nextHash) external onlyHashProducer {
+        if (keccak256(abi.encodePacked(_salt)) != _roundHash) revert InvalidHashError();
+
+        if (_roundStartBlock == 0 || blockhash(_roundStartBlock) != bytes32(0)) revert RoundNotRefundableError();
+
+        _refundBets();
+        _clearLiquidityQueue();
+
+        emit RoundRefunded(_roundHash, _salt);
+
+        _roundStartBlock = 0;
+        _roundHash = _nextHash;
+        unchecked {
+            _hashIndex++;
+        }
+    }
 
     // ########################################################################################
 
@@ -410,12 +430,25 @@ abstract contract HashCrash is Liquidity {
         emit LootTableUpdated(lootTable_);
     }
 
-    function _processBets(uint64 _deadIndex) internal {
+    function _processBets(uint64 _deadIndex) private {
         for (uint256 i = 0; i < _bets.length; i++) {
             Bet storage bet = _bets[i];
 
             if (!bet.cancelled && bet.cashoutIndex < _deadIndex) {
                 _sendValue(bet.user, _lootTable.multiply(bet.amount, bet.cashoutIndex));
+            }
+        }
+
+        delete _bets;
+    }
+
+    function _refundBets() private {
+        for (uint256 i = 0; i < _bets.length; i++) {
+            Bet storage bet = _bets[i];
+
+            if (!bet.cancelled) {
+                _sendValue(bet.user, bet.amount);
+                emit BetCancelled(_roundHash, i);
             }
         }
 
