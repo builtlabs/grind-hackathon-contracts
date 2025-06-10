@@ -172,7 +172,7 @@ describe("Liquidity", function () {
 
                 await sut.deposit(oneEther);
 
-                expect(await sut.harnessGetAvailableLiquidity()).to.equal(oneEther / 10n);
+                expect(await sut.getAvailableLiquidity()).to.equal(oneEther / 10n);
             });
         });
 
@@ -299,7 +299,7 @@ describe("Liquidity", function () {
                 await sut.deposit(oneEther);
                 await sut.withdraw(oneEther);
 
-                expect(await sut.harnessGetAvailableLiquidity()).to.equal(0n);
+                expect(await sut.getAvailableLiquidity()).to.equal(0n);
             });
         });
 
@@ -739,7 +739,7 @@ describe("Liquidity", function () {
             await sut.useRoundLiquidity(oneEther / 10n);
 
             // available is 10% of 10eth, so 1eth. 1eth - 0.1eth = 0.9eth 
-            expect(await sut.harnessGetAvailableLiquidity()).to.equal(ethers.parseEther("0.9"));
+            expect(await sut.getAvailableLiquidity()).to.equal(ethers.parseEther("0.9"));
         });
 
         it("Should not call _onLowLiquidity when hitting the threshold", async function () {
@@ -779,7 +779,7 @@ describe("Liquidity", function () {
 
             await sut.releaseRoundLiquidity(oneEther);
 
-            expect(await sut.harnessGetAvailableLiquidity()).to.equal(oneEther);
+            expect(await sut.getAvailableLiquidity()).to.equal(oneEther);
         });
     });
 });

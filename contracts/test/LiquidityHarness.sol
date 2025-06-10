@@ -19,12 +19,6 @@ contract LiquidityHarness is Liquidity, ERC20Holder {
 
     // #######################################################################################
 
-    function harnessGetAvailableLiquidity() external view returns (uint256) {
-        return _getRoundLiquidity();
-    }
-
-    // #######################################################################################
-
     function mockLoss(uint256 _amount) external {
         _sendValue(msg.sender, _amount);
     }

@@ -73,7 +73,10 @@ abstract contract Liquidity is ValueHolder, Ownable {
 
     // #######################################################################################
 
-    // TODO: Expose available liquidity.
+    /// @notice Returns the current available liquidity.
+    function getAvailableLiquidity() external view returns (uint256) {
+        return _availableLiquidity;
+    }
 
     /// @notice Returns the current maximum exposure numerator.
     function getMaxExposureNumerator() external view returns (uint128) {
