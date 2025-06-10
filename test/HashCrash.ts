@@ -490,6 +490,27 @@ describe("HashCrash", function () {
                     );
                 }
             });
+
+            it("Should return at max, loot table length block hashes", async function () {
+                const { sut, lootTable, config } = await loadFixture(liquidFixture);
+
+                await sut.placeBet(oneEther, 10);
+
+                await mine(config.introBlocks);
+
+                const startBlock = await ethers.provider.getBlockNumber();
+
+                const lootTableLength = Number(await lootTable.getLength());
+                await mine(lootTableLength * 2);
+
+                const roundInfo = await sut.getRoundInfo();
+                expect(roundInfo[5].length).to.equal(lootTableLength);
+                for (let i = 0; i < lootTableLength; i++) {
+                    expect(roundInfo[5][i]).to.equal(
+                        await ethers.provider.getBlock(startBlock + i).then((b) => b!.hash)
+                    );
+                }
+            });
         });
     });
 

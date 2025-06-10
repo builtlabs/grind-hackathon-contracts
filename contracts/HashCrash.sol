@@ -171,8 +171,13 @@ abstract contract HashCrash is Liquidity {
         if (_isIdle() || startBlock_ >= block.number) {
             blockHashes_ = new bytes32[](0);
         } else {
-            // TODO: We need to clamp this length to the length of the loot table.
+            uint64 lootTableLength = uint64(_lootTable.getLength());
             uint64 length = uint64(block.number) - startBlock_;
+
+            if (length > lootTableLength) {
+                length = lootTableLength;
+            }
+
             blockHashes_ = new bytes32[](length);
 
             for (uint64 i = 0; i < length; i++) {
