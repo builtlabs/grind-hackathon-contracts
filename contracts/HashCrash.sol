@@ -181,7 +181,7 @@ abstract contract HashCrash is Liquidity {
             blockHashes_ = new bytes32[](length);
 
             for (uint64 i = 0; i < length; i++) {
-                blockHashes_[i] = _getBlockHash(startBlock_ + i);
+                blockHashes_[i] = blockhash(startBlock_ + i);
             }
         }
     }

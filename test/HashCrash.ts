@@ -511,6 +511,21 @@ describe("HashCrash", function () {
                     );
                 }
             });
+
+            it("Should return bytes32(0) when the hashes are no longer available", async function () {
+                const { sut, lootTable } = await loadFixture(liquidFixture);
+
+                await sut.placeBet(oneEther, 10);
+                
+                await mine(1000);
+                
+                const lootTableLength = Number(await lootTable.getLength());
+                const roundInfo = await sut.getRoundInfo();
+                expect(roundInfo[5].length).to.equal(lootTableLength);
+                for (let i = 0; i < lootTableLength; i++) {
+                    expect(roundInfo[5][i]).to.equal("0x0000000000000000000000000000000000000000000000000000000000000000");
+                }
+            });
         });
     });
 
