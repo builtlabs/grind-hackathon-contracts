@@ -108,8 +108,7 @@ describe("FixedRTP10x", function () {
 
             const averageEv = evs.reduce((acc, curr) => acc + curr, 0) / evs.length;
 
-            expect(averageEv).to.be.greaterThan(expectedEv - 1);
-            expect(averageEv).to.be.lessThan(expectedEv + 1);
+            expect(averageEv).to.equal(96.3120641135446);
 
             logIfEnabled(`Average EV: ${averageEv}`);
         });
@@ -157,9 +156,7 @@ describe("FixedRTP10x", function () {
 
             const averageEv = evs.reduce((acc, curr) => acc + curr, 0) / evs.length;
 
-            // TODO: Check if this can be one.
-            expect(averageEv).to.be.greaterThan(expectedEv - 2);
-            expect(averageEv).to.be.lessThan(expectedEv + 2);
+            expect(averageEv).to.equal(96.62789673314569);
 
             logIfEnabled(`Average EV: ${averageEv}`);
         });
