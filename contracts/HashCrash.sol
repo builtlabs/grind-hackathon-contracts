@@ -31,7 +31,13 @@ abstract contract HashCrash is Liquidity {
     event RoundEnded(bytes32 indexed roundHash, bytes32 roundSalt, uint64 deadIndex);
     event RoundRefunded(bytes32 indexed roundHash, bytes32 roundSalt);
 
-    event BetPlaced(bytes32 indexed roundHash, address indexed user, uint256 amount, uint64 cashoutIndex);
+    event BetPlaced(
+        bytes32 indexed roundHash,
+        uint256 indexed index,
+        address indexed user,
+        uint256 amount,
+        uint64 cashoutIndex
+    );
     event BetCashoutUpdated(bytes32 indexed roundHash, uint256 indexed index, uint64 cashoutIndex);
     event BetCancelled(bytes32 indexed roundHash, uint256 indexed index);
 
@@ -251,11 +257,11 @@ abstract contract HashCrash is Liquidity {
         // Reduce the round liquidity by the users max win
         _useRoundLiquidity(_lootTable.multiply(_amount, _autoCashout));
 
+        // Emit an event for the bet placed
+        emit BetPlaced(_roundHash, _bets.length, msg.sender, _amount, _autoCashout);
+
         // Store the bet
         _bets.push(Bet(_amount, msg.sender, _autoCashout, false));
-
-        // Emit an event for the bet placed
-        emit BetPlaced(_roundHash, msg.sender, _amount, _autoCashout);
     }
 
     /// @notice Updates the auto cashout index for a bet.

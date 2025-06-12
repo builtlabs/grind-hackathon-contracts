@@ -823,11 +823,19 @@ describe("HashCrash", function () {
         it("Should emit BetPlaced", async function () {
             const { sut, wallets, config } = await loadFixture(liquidFixture);
 
-            const cashoutIndex = 10;
+            let betIndex = 0;
+            let cashoutIndex = 10;
 
             await expect(sut.placeBet(oneEther, cashoutIndex))
                 .to.emit(sut, "BetPlaced")
-                .withArgs(config.genesisHash, wallets.deployer.address, oneEther, cashoutIndex);
+                .withArgs(config.genesisHash, betIndex, wallets.deployer.address, oneEther, cashoutIndex);
+
+            betIndex++;
+            cashoutIndex = 9;
+
+            await expect(sut.placeBet(oneEther, cashoutIndex))
+                .to.emit(sut, "BetPlaced")
+                .withArgs(config.genesisHash, betIndex, wallets.deployer.address, oneEther, cashoutIndex);
         });
     });
 
