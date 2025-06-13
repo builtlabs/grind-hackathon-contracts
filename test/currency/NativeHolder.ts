@@ -17,7 +17,7 @@ describe("NativeHolder", function () {
         await nativeReceiving.waitForDeployment();
 
         const SUT = await ethers.getContractFactory("NativeHolderHarness");
-        const sut = await SUT.deploy();
+        const sut = await SUT.deploy(1n); // Minimum value is set to 1 wei, not relevant here.
 
         return {
             sut,

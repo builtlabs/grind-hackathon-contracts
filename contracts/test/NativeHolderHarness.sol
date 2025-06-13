@@ -1,9 +1,12 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import { NativeHolder } from "../currency/NativeHolder.sol";
+import { NativeHolder, ValueHolder } from "../currency/NativeHolder.sol";
+import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
 
 contract NativeHolderHarness is NativeHolder {
+    constructor(uint256 minimumValue_) ValueHolder(minimumValue_) Ownable(msg.sender) {}
+
     function getBalance() external view returns (uint256) {
         return _getBalance();
     }

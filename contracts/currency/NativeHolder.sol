@@ -5,7 +5,7 @@ import { ValueHolder } from "./ValueHolder.sol";
 
 /// @title NativeHolder
 /// @notice An implementation of the ValueHolder contract for the native currency.
-contract NativeHolder is ValueHolder {
+abstract contract NativeHolder is ValueHolder {
     error NativeHolderFailedToClaim();
     error NativeHolderInvalidReceive();
 

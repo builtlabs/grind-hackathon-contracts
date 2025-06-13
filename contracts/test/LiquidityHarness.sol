@@ -14,8 +14,9 @@ contract LiquidityHarness is Liquidity, ERC20Holder {
 
     constructor(
         uint128 lowLiquidityThreshold_,
+        uint256 minimumValue_,
         address token_
-    ) Liquidity(lowLiquidityThreshold_) ERC20Holder(token_) Ownable(msg.sender) {}
+    ) Liquidity(lowLiquidityThreshold_, minimumValue_) ERC20Holder(token_) Ownable(msg.sender) {}
 
     // #######################################################################################
 

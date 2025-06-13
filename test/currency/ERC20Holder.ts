@@ -13,7 +13,7 @@ describe("ERC20Holder", function () {
         await token.waitForDeployment();
 
         const SUT = await ethers.getContractFactory("ERC20HolderHarness");
-        const sut = await SUT.deploy(token.target);
+        const sut = await SUT.deploy(token.target, 1n); // Minimum value is set to 1 wei, not relevant here.
 
         return {
             sut,

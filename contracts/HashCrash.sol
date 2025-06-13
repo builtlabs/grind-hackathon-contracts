@@ -85,14 +85,16 @@ abstract contract HashCrash is Liquidity {
     /// @param genesisHash_ The initial hash for the round.
     /// @param hashProducer_ The address that can produce the next round hash.
     /// @param lowLiquidityThreshold_ The round liquidity below which we should start the round early.
+    /// @param minimumValue_ The minimum value that can be used for bets.
     /// @param owner_ The owner of the contract.
     constructor(
         ILootTable lootTable_,
         bytes32 genesisHash_,
         address hashProducer_,
         uint128 lowLiquidityThreshold_,
+        uint256 minimumValue_,
         address owner_
-    ) Liquidity(lowLiquidityThreshold_) Ownable(owner_) {
+    ) Liquidity(lowLiquidityThreshold_, minimumValue_) Ownable(owner_) {
         _introBlocks = 20;
         _reducedIntroBlocks = 5;
         _cancelReturnNumerator = 9700; // 97%
@@ -260,7 +262,7 @@ abstract contract HashCrash is Liquidity {
     /// @param _amount The amount to bet, must be greater than zero.
     /// @param _autoCashout The index of the auto cashout in the loot table.
     /// @dev If the round has not started, it will initialise the round.
-    function placeBet(uint256 _amount, uint64 _autoCashout) external payable notZero(_amount) {
+    function placeBet(uint256 _amount, uint64 _autoCashout) external payable enforceMinimum(_amount) {
         if (_roundStartBlock == 0) {
             _initialiseRound();
         }

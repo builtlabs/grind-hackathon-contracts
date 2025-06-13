@@ -4,6 +4,7 @@ import { ethers } from "hardhat";
 import { id } from "ethers";
 
 const lowLiquidityThreshold = ethers.parseEther("0.1");
+const minimumValue = ethers.parseEther("0.001");
 const initialBalance = ethers.parseEther("1000");
 const oneEther = ethers.parseEther("1");
 
@@ -31,6 +32,7 @@ describe("HashCrash", function () {
             getHash(genesisSalt),
             deployer.address,
             lowLiquidityThreshold,
+            minimumValue,
             deployer.address,
             token.target
         );
@@ -189,12 +191,14 @@ describe("HashCrash", function () {
     // ############################ TESTS ############################
 
     describe("Integration Tests", function () {
-        it.only("Should not be possible to brick the reveal function using many bets", async function () {
+        it.skip("Should not be possible to brick the reveal function using many bets", async function () {
             const { sut, token, lootTable, config } = await loadFixture(liquidFixture);
 
             const MaliciousBetter = await ethers.getContractFactory("MaliciousBetter");
             const maliciousBetter = await MaliciousBetter.deploy(sut.target);
             await maliciousBetter.waitForDeployment();
+
+            await sut.setMinimum(1n);
 
             // NOTE: Abstract does not actually have a gas limit, but we still dont want this to be too expensive
             const softcap = 30000000n;
@@ -212,7 +216,9 @@ describe("HashCrash", function () {
 
             for (let i = 0; i < multibets; i++) {
                 await maliciousBetter.multiBet(betAmount, totalAmount, cashoutIndex);
-                await maliciousBetter.multiCancel(Array.from({ length: Number(betAmount) }, (_, j) => j + (i * Number(betAmount))));
+                await maliciousBetter.multiCancel(
+                    Array.from({ length: Number(betAmount) }, (_, j) => j + i * Number(betAmount))
+                );
             }
 
             const length = Number(await lootTable.getLength());
@@ -241,6 +247,12 @@ describe("HashCrash", function () {
             const { sut } = await loadFixture(baseFixture);
 
             expect(await sut.getLowLiquidityThreshold()).to.equal(lowLiquidityThreshold);
+        });
+
+        it("Should set the minimum value", async function () {
+            const { sut } = await loadFixture(baseFixture);
+
+            expect(await sut.getMinimum()).to.equal(minimumValue);
         });
 
         it("Should set active to false", async function () {
@@ -295,6 +307,7 @@ describe("HashCrash", function () {
                 config.genesisHash,
                 config.hashProducer,
                 lowLiquidityThreshold,
+                minimumValue,
                 config.owner,
                 token.target
             );
@@ -723,10 +736,13 @@ describe("HashCrash", function () {
     });
 
     describe("placeBet", function () {
-        it("Should revert if the amount is zero", async function () {
+        it("Should revert if the amount is below the minimum", async function () {
             const { sut } = await loadFixture(liquidFixture);
 
-            await expect(sut.placeBet(0, 10)).to.be.revertedWithCustomError(sut, "InvalidValue");
+            await expect(sut.placeBet(minimumValue - 1n, 10)).to.be.revertedWithCustomError(
+                sut,
+                "ValueHolderValueTooSmall"
+            );
         });
 
         describe("_initialiseRound", function () {

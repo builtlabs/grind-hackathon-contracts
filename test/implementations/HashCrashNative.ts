@@ -4,6 +4,7 @@ import { id } from "ethers";
 import { ethers } from "hardhat";
 
 const lowLiquidityThreshold = ethers.parseEther("0.1");
+const minimumValue = ethers.parseEther("1");
 const oneEther = ethers.parseEther("1");
 
 function getHash(salt: string) {
@@ -30,6 +31,7 @@ describe("HashCrashNative", function () {
             getHash(genesisSalt),
             deployer.address,
             lowLiquidityThreshold,
+            minimumValue,
             deployer.address
         );
         await sut.waitForDeployment();
@@ -59,6 +61,12 @@ describe("HashCrashNative", function () {
             const { sut } = await loadFixture(fixture);
 
             expect(await sut.getLowLiquidityThreshold()).to.equal(lowLiquidityThreshold);
+        });
+
+        it("Should set the minimum value", async function () {
+            const { sut } = await loadFixture(fixture);
+
+            expect(await sut.getMinimum()).to.equal(minimumValue);
         });
 
         it("Should set active to false", async function () {
@@ -113,6 +121,7 @@ describe("HashCrashNative", function () {
                 config.genesisHash,
                 config.hashProducer,
                 lowLiquidityThreshold,
+                minimumValue,
                 config.owner
             );
             const receipt = (await tx.deploymentTransaction()!.wait())!;

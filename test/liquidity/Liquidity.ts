@@ -3,6 +3,7 @@ import { expect } from "chai";
 import { ethers } from "hardhat";
 
 const lowLiquidityThreshold = ethers.parseEther("0.1");
+const minimumValue = ethers.parseEther("0.01");
 const oneEther = ethers.parseEther("1");
 
 describe("Liquidity", function () {
@@ -14,7 +15,7 @@ describe("Liquidity", function () {
         await token.waitForDeployment();
 
         const SUT = await ethers.getContractFactory("LiquidityHarness");
-        const sut = await SUT.deploy(lowLiquidityThreshold, token.target);
+        const sut = await SUT.deploy(lowLiquidityThreshold, minimumValue, token.target);
 
         return {
             sut,
@@ -41,6 +42,12 @@ describe("Liquidity", function () {
             const { sut } = await loadFixture(fixture);
 
             expect(await sut.getLowLiquidityThreshold()).to.equal(lowLiquidityThreshold);
+        });
+
+        it("Should set the minimum value", async function () {
+            const { sut } = await loadFixture(fixture);
+
+            expect(await sut.getMinimum()).to.equal(minimumValue);
         });
     });
 
@@ -93,10 +100,13 @@ describe("Liquidity", function () {
     });
 
     describe("deposit", function () {
-        it("Should revert if the value is 0", async function () {
-            const { sut } = await loadFixture(fixture);
+        it("Should revert if the value is below the minimum", async function () {
+            const { sut, token, wallets } = await loadFixture(fixture);
 
-            await expect(sut.deposit(0)).to.be.revertedWithCustomError(sut, "InvalidValue");
+            await token.mint(wallets.deployer.address, minimumValue);
+            await token.approve(sut.target, minimumValue);
+
+            await expect(sut.deposit(minimumValue - 1n)).to.be.revertedWithCustomError(sut, "ValueHolderValueTooSmall");
         });
 
         it("Should receive the token value", async function () {
@@ -226,7 +236,7 @@ describe("Liquidity", function () {
         it("Should revert if the value is 0", async function () {
             const { sut } = await loadFixture(fixture);
 
-            await expect(sut.withdraw(0)).to.be.revertedWithCustomError(sut, "InvalidValue");
+            await expect(sut.withdraw(0)).to.be.revertedWithCustomError(sut, "ValueHolderValueTooSmall");
         });
 
         describe("_canChangeLiquidity() == true", function () {
@@ -728,7 +738,7 @@ describe("Liquidity", function () {
             const { sut, token, wallets } = await loadFixture(fixture);
 
             const deposited = oneEther * 10n;
-            
+
             await token.mint(wallets.deployer.address, deposited);
             await token.approve(sut.target, deposited);
 
@@ -738,7 +748,7 @@ describe("Liquidity", function () {
 
             await sut.useRoundLiquidity(oneEther / 10n);
 
-            // available is 10% of 10eth, so 1eth. 1eth - 0.1eth = 0.9eth 
+            // available is 10% of 10eth, so 1eth. 1eth - 0.1eth = 0.9eth
             expect(await sut.getAvailableLiquidity()).to.equal(ethers.parseEther("0.9"));
         });
 

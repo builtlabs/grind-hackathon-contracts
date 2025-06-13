@@ -1,10 +1,14 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import { ERC20Holder } from "../currency/ERC20Holder.sol";
+import { ERC20Holder, ValueHolder } from "../currency/ERC20Holder.sol";
+import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
 
 contract ERC20HolderHarness is ERC20Holder {
-    constructor(address token_) ERC20Holder(token_) {}
+    constructor(
+        address token_,
+        uint256 minimumValue_
+    ) ERC20Holder(token_) ValueHolder(minimumValue_) Ownable(msg.sender) {}
 
     function getBalance() external view returns (uint256) {
         return _getBalance();

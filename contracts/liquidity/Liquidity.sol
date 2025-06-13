@@ -2,11 +2,10 @@
 pragma solidity ^0.8.24;
 
 import { ValueHolder } from "../currency/ValueHolder.sol";
-import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
 
 /// @title Liquidity
 /// @notice A base contract for managing liquidity.
-abstract contract Liquidity is ValueHolder, Ownable {
+abstract contract Liquidity is ValueHolder {
     uint256 constant _DENOMINATOR = 10000;
 
     // #######################################################################################
@@ -15,7 +14,6 @@ abstract contract Liquidity is ValueHolder, Ownable {
     event LiquidityRemoved(address indexed user, uint256 tokenDelta, uint256 shareDelta);
     event LiquidityChangeQueued(uint8 indexed action, address indexed user, uint256 amount);
 
-    error InvalidValue();
     error InvalidMaxExposure();
     error InsufficientShares();
     error InsufficientLiquidity();
@@ -39,16 +37,10 @@ abstract contract Liquidity is ValueHolder, Ownable {
 
     // #######################################################################################
 
-    modifier notZero(uint256 _value) {
-        if (_value == 0) revert InvalidValue();
-        _;
-    }
-
-    // #######################################################################################
-
     /// @notice Constructor sets the initial max liquidity exposure to 10% and the low liquidity threshold.
     /// @param lowLiquidityThreshold_ The threshold below which the parent is notified the _availableLiquidity is low.
-    constructor(uint128 lowLiquidityThreshold_) {
+    /// @param minimumValue_ The minimum value that can be used for deposits.
+    constructor(uint128 lowLiquidityThreshold_, uint256 minimumValue_) ValueHolder(minimumValue_) {
         _maxExposureNumerator = 1000; // 10%
         _lowLiquidityThreshold = lowLiquidityThreshold_;
     }
@@ -107,7 +99,7 @@ abstract contract Liquidity is ValueHolder, Ownable {
 
     /// @notice Either deposits, or queues a deposit of the given amount by the sender.
     /// @param _amount The amount to deposit, must be greater than zero.
-    function deposit(uint256 _amount) external payable notZero(_amount) {
+    function deposit(uint256 _amount) external payable enforceMinimum(_amount) {
         // Standardize behavior between native and ERC20 deposits.
         _receiveValue(msg.sender, _amount);
 

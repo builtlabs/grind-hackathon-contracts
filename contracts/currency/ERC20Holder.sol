@@ -8,7 +8,7 @@ import { SafeERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.s
 
 /// @title ERC20Holder
 /// @notice An implementation of the ValueHolder contract for a given ERC20 token.
-contract ERC20Holder is ValueHolder {
+abstract contract ERC20Holder is ValueHolder {
     IERC20 private immutable _token;
 
     // #######################################################################################
