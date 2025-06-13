@@ -1,7 +1,10 @@
-import { HardhatUserConfig } from "hardhat/config";
+import { HardhatUserConfig, vars } from "hardhat/config";
 import "@nomicfoundation/hardhat-toolbox";
 import "@nomicfoundation/hardhat-ethers";
 import "@matterlabs/hardhat-zksync";
+
+const COINMARKETCAP_API_KEY = vars.get("COINMARKETCAP_API_KEY");
+const ABSSCAN_API_KEY = vars.get("ABSSCAN_API_KEY");
 
 const config: HardhatUserConfig = {
     solidity: {
@@ -16,6 +19,12 @@ const config: HardhatUserConfig = {
         },
     },
     defaultNetwork: "hardhat",
+    gasReporter: {
+        coinmarketcap: `${COINMARKETCAP_API_KEY}`,
+        gasPriceApi: `https://api.basescan.org/api?module=proxy&action=eth_gasPrice`,
+        enabled: true,
+        currency: "USD",
+    },
     networks: {
         hardhat: {},
         abstractTestnet: {
@@ -34,7 +43,7 @@ const config: HardhatUserConfig = {
     etherscan: {
         apiKey: {
             abstractTestnet: "TACK2D1RGYX9U7MC31SZWWQ7FCWRYQ96AD",
-            abstractMainnet: "your-abscan-api-key-here",
+            abstractMainnet: ABSSCAN_API_KEY,
         },
         customChains: [
             {
