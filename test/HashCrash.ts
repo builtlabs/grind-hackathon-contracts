@@ -1,7 +1,6 @@
 import { loadFixture, mine } from "@nomicfoundation/hardhat-toolbox/network-helpers";
 import { expect } from "chai";
 import { ethers } from "hardhat";
-import { LootTable } from "../typechain-types";
 import { id } from "ethers";
 
 const lowLiquidityThreshold = ethers.parseEther("0.1");
@@ -10,25 +9,6 @@ const oneEther = ethers.parseEther("1");
 
 function getHash(salt: string) {
     return ethers.keccak256(ethers.solidityPacked(["bytes32"], [salt]));
-}
-
-// Gets the dead index given the entire game has played out, don't use this in production
-async function getDeadIndex(lootTable: LootTable, salt: string, blockHashes: string[]) {
-    const length = Number(await lootTable.getLength());
-
-    expect(blockHashes.length).to.equal(length);
-
-    let deadIndex = blockHashes.length;
-    for (let i = 0; i < blockHashes.length; i++) {
-        const rng = ethers.keccak256(ethers.solidityPacked(["bytes32", "bytes32"], [salt, blockHashes[i]]));
-
-        if (await lootTable.isDead(rng, i)) {
-            deadIndex = i;
-            break;
-        }
-    }
-
-    return deadIndex;
 }
 
 describe("HashCrash", function () {
@@ -192,9 +172,7 @@ describe("HashCrash", function () {
         await mine(config.introBlocks + length + 1); // + 1 otherwise cant read that final block hash
 
         const info = await sut.getRoundInfo();
-        const blockHashes = info[5];
-
-        const deadIndex = await getDeadIndex(lootTable, config.genesisSalt, blockHashes);
+        const deadIndex = await lootTable.getDeadIndex(config.genesisSalt, info[1]);
 
         return { sut, lootTable, token, wallets, config: { ...config, deadIndex } };
     }
@@ -524,14 +502,16 @@ describe("HashCrash", function () {
                 const { sut, lootTable } = await loadFixture(liquidFixture);
 
                 await sut.placeBet(oneEther, 10);
-                
+
                 await mine(1000);
-                
+
                 const lootTableLength = Number(await lootTable.getLength());
                 const roundInfo = await sut.getRoundInfo();
                 expect(roundInfo[5].length).to.equal(lootTableLength);
                 for (let i = 0; i < lootTableLength; i++) {
-                    expect(roundInfo[5][i]).to.equal("0x0000000000000000000000000000000000000000000000000000000000000000");
+                    expect(roundInfo[5][i]).to.equal(
+                        "0x0000000000000000000000000000000000000000000000000000000000000000"
+                    );
                 }
             });
         });
@@ -1097,11 +1077,11 @@ describe("HashCrash", function () {
         });
 
         it("Should revert if this function was called too early", async function () {
-            const { sut, config } = await loadFixture(betFixture);
+            const { sut, lootTable, config } = await loadFixture(betFixture);
 
             await expect(sut.reveal(config.genesisSalt, nextHash)).to.be.revertedWithCustomError(
-                sut,
-                "InvalidHashError"
+                lootTable,
+                "MissingBlockhashError"
             );
         });
 
@@ -1121,7 +1101,7 @@ describe("HashCrash", function () {
             await mine(config.introBlocks + length + 1);
 
             const info = await sut.getRoundInfo();
-            const deadIndex = await getDeadIndex(lootTable, config.genesisSalt, info[5]);
+            const deadIndex = await lootTable.getDeadIndex(config.genesisSalt, info[1]);
 
             const sutBalanceBefore = await token.balanceOf(sut.target);
             const beforeBalances = await Promise.all(config.bets.map((b) => token.balanceOf(b.wallet.address)));
@@ -1149,7 +1129,7 @@ describe("HashCrash", function () {
             await mine(config.introBlocks + length + 1);
 
             const info = await sut.getRoundInfo();
-            const deadIndex = await getDeadIndex(lootTable, config.genesisSalt, info[5]);
+            const deadIndex = await lootTable.getDeadIndex(config.genesisSalt, info[1]);
 
             expect(deadIndex).to.equal(length);
 
@@ -1184,7 +1164,7 @@ describe("HashCrash", function () {
             await mine(config.introBlocks + length - cancelToExc + 1);
 
             const info = await sut.getRoundInfo();
-            const deadIndex = await getDeadIndex(lootTable, config.genesisSalt, info[5]);
+            const deadIndex = await lootTable.getDeadIndex(config.genesisSalt, info[1]);
 
             const sutBalanceBefore = await token.balanceOf(sut.target);
             const beforeBalances = await Promise.all(config.bets.map((b) => token.balanceOf(b.wallet.address)));
@@ -1212,7 +1192,7 @@ describe("HashCrash", function () {
             await mine(config.introBlocks + length + 1);
 
             const info = await sut.getRoundInfo();
-            const deadIndex = await getDeadIndex(lootTable, config.genesisSalt, info[5]);
+            const deadIndex = Number(await lootTable.getDeadIndex(config.genesisSalt, info[1]));
 
             const beforeBalances = await Promise.all(config.bets.map((b) => token.balanceOf(b.wallet.address)));
 

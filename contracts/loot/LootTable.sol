@@ -9,6 +9,8 @@ abstract contract LootTable is ILootTable {
     uint256 private constant MULTIPLIER_DENOMINATOR = 1e6;
     uint256 private constant PROBABILITY_DENOMINATOR = 1e18;
 
+    error MissingBlockhashError();
+
     // #######################################################################################
 
     modifier validIndex(uint256 _index) {
@@ -52,7 +54,28 @@ abstract contract LootTable is ILootTable {
 
     /// @notice Returns whether the given random number results in death at the given index.
     function isDead(uint256 _rng, uint256 _index) external pure validIndex(_index) returns (bool) {
-        return _rng % PROBABILITY_DENOMINATOR < _probability(_index);
+        return _isDead(_rng, _index);
+    }
+
+    /// @notice Returns the dead index for a given salt.
+    /// @dev The dead index is between 0 and the loot table length (inclusive). The final multiplier for the round is at deadIndex - 1. Unless it is 0, then the round has a 0x multiplier.
+    function getDeadIndex(bytes32 _salt, uint256 _roundStartBlock) external view returns (uint64) {
+        uint64 length = uint64(_getLength());
+
+        for (uint64 i = 0; i < length; i++) {
+            // Generate a random number based on the salt and the block hash
+            // The salt is unknown to block producers.
+            // The block hash is unknown to the hash producer.
+            uint256 rng = uint256(keccak256(abi.encodePacked(_salt, _getBlockHash(_roundStartBlock + i))));
+
+            // Check if the generated random number is dead at this index
+            if (_isDead(rng, i)) {
+                return i;
+            }
+        }
+
+        // This happens when no dead index is found, meaning the round has ended with the maximum multiplier.
+        return length;
     }
 
     // #######################################################################################
@@ -62,4 +85,15 @@ abstract contract LootTable is ILootTable {
     function _multiplier(uint256 _index) internal pure virtual returns (uint256);
 
     function _probability(uint256 _index) internal pure virtual returns (uint256);
+
+    // #######################################################################################
+
+    function _isDead(uint256 _rng, uint256 _index) private pure returns (bool) {
+        return _rng % PROBABILITY_DENOMINATOR < _probability(_index);
+    }
+
+    function _getBlockHash(uint256 _blockNumber) private view returns (bytes32 blockHash_) {
+        blockHash_ = blockhash(_blockNumber);
+        if (blockHash_ == bytes32(0)) revert MissingBlockhashError();
+    }
 }

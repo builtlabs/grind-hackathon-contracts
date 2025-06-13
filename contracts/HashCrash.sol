@@ -330,7 +330,7 @@ abstract contract HashCrash is Liquidity {
     function reveal(bytes32 _salt, bytes32 _nextHash) external onlyHashProducer {
         if (keccak256(abi.encodePacked(_salt)) != _roundHash) revert InvalidHashError();
 
-        uint64 deadIndex = _getDeadIndex(_salt);
+        uint64 deadIndex = _lootTable.getDeadIndex(_salt, _roundStartBlock);
 
         _processBets(deadIndex);
         _clearLiquidityQueue();
@@ -391,31 +391,6 @@ abstract contract HashCrash is Liquidity {
 
         if (bet_.user != msg.sender) revert BetNotYoursError();
         if (bet_.cancelled) revert BetCancelledError();
-    }
-
-    /// @dev The dead index is between 0 and the loot table length (inclusive). The final multiplier for the round is at deadIndex - 1. Unless it is 0, then the round has a 0x multiplier.
-    function _getDeadIndex(bytes32 _salt) private view returns (uint64) {
-        uint64 length = uint64(_lootTable.getLength());
-
-        for (uint64 i = 0; i < length; i++) {
-            // Generate a random number based on the salt and the block hash
-            // The salt is unknown to block producers.
-            // The block hash is unknown to the hash producer.
-            uint256 rng = uint256(keccak256(abi.encodePacked(_salt, _getBlockHash(_roundStartBlock + i))));
-
-            // Check if the generated random number is dead at this index
-            if (_lootTable.isDead(rng, i)) {
-                return i;
-            }
-        }
-
-        // This happens when no dead index is found, meaning the round has ended with the maximum multiplier.
-        return length;
-    }
-
-    function _getBlockHash(uint256 _blockNumber) private view returns (bytes32 blockHash_) {
-        blockHash_ = blockhash(_blockNumber);
-        if (blockHash_ == bytes32(0)) revert InvalidHashError();
     }
 
     function _initialiseRound() private {

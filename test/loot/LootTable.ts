@@ -1,4 +1,4 @@
-import { loadFixture } from "@nomicfoundation/hardhat-toolbox/network-helpers";
+import { loadFixture, mine } from "@nomicfoundation/hardhat-toolbox/network-helpers";
 import { expect } from "chai";
 import { ethers } from "hardhat";
 
@@ -9,6 +9,30 @@ describe("LootTable", function () {
         const [deployer] = await ethers.getSigners();
 
         const SUT = await ethers.getContractFactory("MockLootTable");
+        const sut = await SUT.deploy();
+
+        return {
+            sut,
+            wallet: deployer,
+        };
+    }
+
+    async function predictableDeathTable() {
+        const [deployer] = await ethers.getSigners();
+
+        const SUT = await ethers.getContractFactory("PredictableDeathTable");
+        const sut = await SUT.deploy();
+
+        return {
+            sut,
+            wallet: deployer,
+        };
+    }
+
+    async function noDeathTable() {
+        const [deployer] = await ethers.getSigners();
+
+        const SUT = await ethers.getContractFactory("NoDeathTable");
         const sut = await SUT.deploy();
 
         return {
@@ -86,6 +110,42 @@ describe("LootTable", function () {
             const offset = ethers.parseEther("0.501");
 
             expect(await sut.isDead(padding + offset, 0)).to.equal(false);
+        });
+    });
+
+    describe("getDeadIndex", function () {
+        const salt = ethers.hexlify(ethers.randomBytes(32));
+
+        it("Should revert if the block hash is not available", async function () {
+            const { sut } = await loadFixture(fixture);
+
+            const startBlock = await ethers.provider.getBlockNumber();
+            await expect(sut.getDeadIndex(salt, startBlock)).to.be.revertedWithCustomError(
+                sut,
+                "MissingBlockhashError"
+            );
+        });
+
+        it("Should get the expected dead index", async function () {
+            const { sut } = await loadFixture(predictableDeathTable);
+
+            const length = await sut.getLength();
+
+            const startBlock = await ethers.provider.getBlockNumber();
+            await mine(Number(length));
+
+            expect(await sut.getDeadIndex(salt, startBlock)).to.equal(3);
+        });
+
+        it("Should return length when none of the probabilities cause a death", async function () {
+            const { sut } = await loadFixture(noDeathTable);
+
+            const length = await sut.getLength();
+
+            const startBlock = await ethers.provider.getBlockNumber();
+            await mine(Number(length));
+
+            expect(await sut.getDeadIndex(salt, startBlock)).to.equal(length);
         });
     });
 });
