@@ -8,6 +8,8 @@ import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
 /// @title HashCrash
 /// @notice The base hashcrash implementation, without specifying the value type.
 abstract contract HashCrash is Liquidity {
+    uint256 private constant DENOMINATOR = 10000;
+
     error NotActiveError();
 
     error BetNotFoundError();
@@ -21,6 +23,7 @@ abstract contract HashCrash is Liquidity {
 
     error InvalidHashError();
     error InvalidCashoutIndexError();
+    error InvalidCancelReturnNumeratorError();
 
     error RoundNotRefundableError();
 
@@ -65,6 +68,7 @@ abstract contract HashCrash is Liquidity {
     bytes32 private _roundHash;
     address private _hashProducer;
     uint64 private _roundStartBlock;
+    uint32 private _cancelReturnNumerator;
 
     ILootTable private _lootTable;
     uint64 private _introBlocks;
@@ -91,6 +95,7 @@ abstract contract HashCrash is Liquidity {
     ) Liquidity(lowLiquidityThreshold_) Ownable(owner_) {
         _introBlocks = 20;
         _reducedIntroBlocks = 5;
+        _cancelReturnNumerator = 9700; // 97%
         _roundHash = genesisHash_;
         _hashProducer = hashProducer_;
 
@@ -102,6 +107,11 @@ abstract contract HashCrash is Liquidity {
     /// @notice Returns whether the game is active.
     function getActive() external view returns (bool) {
         return _active;
+    }
+
+    /// @notice Returns the current cancel return numerator.
+    function getCancelReturnNumerator() external view returns (uint32) {
+        return _cancelReturnNumerator;
     }
 
     /// @notice Returns the current loot table.
@@ -207,6 +217,14 @@ abstract contract HashCrash is Liquidity {
         emit ActiveUpdated(active_);
     }
 
+    /// @notice Sets the cancel return numerator.
+    /// @param cancelReturnNumerator_ The new cancel return numerator.
+    /// @dev The numerator must be less than or equal to the denominator (10000).
+    function setCancelReturnNumerator(uint32 cancelReturnNumerator_) external onlyOwner {
+        if (cancelReturnNumerator_ > DENOMINATOR) revert InvalidCancelReturnNumeratorError();
+        _cancelReturnNumerator = cancelReturnNumerator_;
+    }
+
     /// @notice Sets the hash producer address.
     /// @param hashProducer_ The new hash producer address.
     function setHashProducer(address hashProducer_) external onlyOwner {
@@ -296,8 +314,8 @@ abstract contract HashCrash is Liquidity {
         // Cancel the bet
         bet.cancelled = true;
 
-        // Refund the bet
-        _sendValue(msg.sender, bet.amount);
+        // Partially refund the user
+        _sendValue(msg.sender, _getCancelReturn(bet.amount));
 
         // Update the round liquidity
         _releaseRoundLiquidity(_lootTable.multiply(bet.amount, bet.cashoutIndex));
@@ -434,5 +452,9 @@ abstract contract HashCrash is Liquidity {
         }
 
         delete _bets;
+    }
+
+    function _getCancelReturn(uint256 _amount) private view returns (uint256) {
+        return (_amount * _cancelReturnNumerator) / DENOMINATOR;
     }
 }

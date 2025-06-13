@@ -83,6 +83,12 @@ describe("HashCrashERC20", function () {
             expect(await sut.getReducedIntroBlocks()).to.equal(5);
         });
 
+        it("Should set the cancel return to 9700 (97%)", async function () {
+            const { sut } = await loadFixture(fixture);
+
+            expect(await sut.getCancelReturnNumerator()).to.equal(9700);
+        });
+
         it("Should set the genesis hash", async function () {
             const { sut, config } = await loadFixture(fixture);
 

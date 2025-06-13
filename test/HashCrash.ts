@@ -54,6 +54,7 @@ describe("HashCrash", function () {
                 owner: deployer.address,
                 introBlocks: 20,
                 reducedIntroBlocks: 5,
+                cancelReturnNumerator: 9700n, // 97%
                 liquidityPerRound: (total: bigint) => (total * 1000n) / 10000n,
             },
         };
@@ -218,6 +219,12 @@ describe("HashCrash", function () {
             expect(await sut.getReducedIntroBlocks()).to.equal(config.reducedIntroBlocks);
         });
 
+        it("Should set the cancel return to 9700 (97%)", async function () {
+            const { sut, config } = await loadFixture(baseFixture);
+
+            expect(await sut.getCancelReturnNumerator()).to.equal(config.cancelReturnNumerator);
+        });
+
         it("Should set the genesis hash", async function () {
             const { sut, config } = await loadFixture(baseFixture);
 
@@ -323,6 +330,14 @@ describe("HashCrash", function () {
             const { sut, config } = await loadFixture(baseFixture);
 
             expect(await sut.getReducedIntroBlocks()).to.equal(config.reducedIntroBlocks);
+        });
+    });
+
+    describe("getCancelReturnNumerator", function () {
+        it("Should return the cancel return numerator", async function () {
+            const { sut, config } = await loadFixture(baseFixture);
+
+            expect(await sut.getCancelReturnNumerator()).to.equal(config.cancelReturnNumerator);
         });
     });
 
@@ -566,6 +581,34 @@ describe("HashCrash", function () {
             await sut.setHashProducer(wallets.bob.address);
 
             expect(await sut.getHashProducer()).to.equal(wallets.bob.address);
+        });
+    });
+
+    describe("setCancelReturnNumerator", function () {
+        it("Should revert if the caller is not the owner", async function () {
+            const { sut, wallets } = await loadFixture(baseFixture);
+
+            await expect(sut.connect(wallets.alice).setCancelReturnNumerator(10)).to.be.revertedWithCustomError(
+                sut,
+                "OwnableUnauthorizedAccount"
+            );
+        });
+
+        it("Should revert if the value is greater than 10000", async function () {
+            const { sut } = await loadFixture(baseFixture);
+
+            await expect(sut.setCancelReturnNumerator(10001)).to.be.revertedWithCustomError(
+                sut,
+                "InvalidCancelReturnNumeratorError"
+            );
+        });
+
+        it("Should set the cancel return numerator", async function () {
+            const { sut } = await loadFixture(baseFixture);
+
+            await sut.setCancelReturnNumerator(10);
+
+            expect(await sut.getCancelReturnNumerator()).to.equal(10);
         });
     });
 
@@ -953,16 +996,18 @@ describe("HashCrash", function () {
             expect(betsAfter[0].cancelled).to.equal(true);
         });
 
-        it("Should refund the value", async function () {
-            const { sut, token, wallets } = await loadFixture(betFixture);
+        it("Should refund the value minus a fee", async function () {
+            const { sut, token, wallets, config } = await loadFixture(betFixture);
 
             const initialBalance = await token.balanceOf(wallets.deployer.address);
             const initialContractBalance = await token.balanceOf(sut.target);
 
+            const refunded = oneEther * config.cancelReturnNumerator / 10000n;
+
             await sut.cancelBet(0);
 
-            expect(await token.balanceOf(wallets.deployer.address)).to.equal(initialBalance + oneEther);
-            expect(await token.balanceOf(sut.target)).to.equal(initialContractBalance - oneEther);
+            expect(await token.balanceOf(wallets.deployer.address)).to.equal(initialBalance + refunded);
+            expect(await token.balanceOf(sut.target)).to.equal(initialContractBalance - refunded);
         });
 
         it("Should release the round liquidity", async function () {
