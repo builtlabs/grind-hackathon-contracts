@@ -40,8 +40,7 @@ abstract contract ValueHolder is Ownable {
     // #######################################################################################
 
     constructor(uint256 _minimumValue) {
-        if (_minimumValue == 0) revert ValueHolderValueTooSmall();
-        _minimum = _minimumValue;
+        _setMinimum(_minimumValue);
     }
 
     // #######################################################################################
@@ -65,8 +64,7 @@ abstract contract ValueHolder is Ownable {
 
     /// @notice Sets the minimum value that can be used.
     function setMinimum(uint256 _minimumValue) external onlyOwner {
-        if (_minimumValue == 0) revert ValueHolderValueTooSmall();
-        _minimum = _minimumValue;
+        _setMinimum(_minimumValue);
     }
 
     // #######################################################################################
@@ -89,6 +87,11 @@ abstract contract ValueHolder is Ownable {
         }
 
         emit StagedBalanceDecreased(_amount);
+    }
+
+    function _setMinimum(uint256 _minimumValue) internal {
+        if (_minimumValue == 0) revert ValueHolderValueTooSmall();
+        _minimum = _minimumValue;
     }
 
     function _getMinimum() internal view returns (uint256) {
