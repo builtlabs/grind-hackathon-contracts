@@ -9,6 +9,7 @@ contract LiquidityHarness is Liquidity, ERC20Holder {
     event OnLowLiquidity();
 
     bool public canChangeLiquidity;
+    uint64 public round;
 
     // #######################################################################################
 
@@ -16,9 +17,15 @@ contract LiquidityHarness is Liquidity, ERC20Holder {
         uint128 lowLiquidityThreshold_,
         uint256 minimumValue_,
         address token_
-    ) Liquidity(lowLiquidityThreshold_, minimumValue_) ERC20Holder(token_) Ownable(msg.sender) {}
+    ) Liquidity(lowLiquidityThreshold_, minimumValue_) ERC20Holder(token_) Ownable(msg.sender) {
+        round = 1;
+    }
 
     // #######################################################################################
+
+    function mockRound(uint64 _round) external {
+        round = _round;
+    }
 
     function mockLoss(uint256 _amount) external {
         _sendValue(msg.sender, _amount);
@@ -44,6 +51,10 @@ contract LiquidityHarness is Liquidity, ERC20Holder {
 
     function _canChangeLiquidity() internal view override returns (bool) {
         return canChangeLiquidity;
+    }
+
+    function _getRound() internal view override returns (uint64) {
+        return round;
     }
 
     function _onLowLiquidity() internal override {

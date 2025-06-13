@@ -391,6 +391,10 @@ abstract contract HashCrash is Liquidity {
         return _isIdle();
     }
 
+    function _getRound() internal view override returns (uint64) {
+        return _hashIndex + 1; // Ensure it is never zero
+    }
+
     function _onLowLiquidity() internal override {
         if (_roundStartBlock != 0 && block.number < _roundStartBlock - _reducedIntroBlocks) {
             _roundStartBlock = uint64(block.number + _reducedIntroBlocks);

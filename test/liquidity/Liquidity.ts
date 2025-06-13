@@ -109,6 +109,30 @@ describe("Liquidity", function () {
             await expect(sut.deposit(minimumValue - 1n)).to.be.revertedWithCustomError(sut, "ValueHolderValueTooSmall");
         });
 
+        it("Should revert if another change has already been made", async function () {
+            const { sut, token, wallets } = await loadFixture(fixture);
+
+            await token.mint(wallets.deployer.address, oneEther * 2n);
+            await token.approve(sut.target, oneEther * 2n);
+
+            await sut.deposit(oneEther);
+
+            await expect(sut.deposit(oneEther)).to.be.revertedWithCustomError(sut, "OneChangePerRound");
+        });
+
+        it("Should update lastUpdated", async function () {
+            const { sut, token, wallets } = await loadFixture(fixture);
+
+            await token.mint(wallets.deployer.address, oneEther);
+            await token.approve(sut.target, oneEther);
+
+            const round = 2n;
+            await sut.mockRound(round);
+
+            await sut.deposit(oneEther);
+            expect(await sut.getLastUpdated(wallets.deployer)).to.equal(round);
+        });
+
         it("Should receive the token value", async function () {
             const { sut, token, wallets } = await loadFixture(fixture);
 
@@ -153,6 +177,7 @@ describe("Liquidity", function () {
                 await sut.mockCanChangeLiquidity(true);
 
                 await sut.deposit(oneEther / 4n);
+                await sut.mockRound(2n);
                 await sut.deposit((oneEther / 4n) * 3n);
 
                 expect(await sut.getShares(wallets.deployer.address)).to.equal(oneEther);
@@ -239,6 +264,32 @@ describe("Liquidity", function () {
             await expect(sut.withdraw(0)).to.be.revertedWithCustomError(sut, "ValueHolderValueTooSmall");
         });
 
+        it("Should revert if another change has already been made", async function () {
+            const { sut, token, wallets } = await loadFixture(fixture);
+
+            await token.mint(wallets.deployer.address, oneEther);
+            await token.approve(sut.target, oneEther);
+
+            await sut.deposit(oneEther);
+
+            await expect(sut.withdraw(oneEther)).to.be.revertedWithCustomError(sut, "OneChangePerRound");
+        });
+
+        it("Should update lastUpdated", async function () {
+            const { sut, token, wallets } = await loadFixture(fixture);
+
+            await token.mint(wallets.deployer.address, oneEther);
+            await token.approve(sut.target, oneEther);
+            await sut.deposit(oneEther);
+
+            const round = 2n;
+            await sut.mockRound(round);
+
+            await sut.withdraw(oneEther);
+
+            expect(await sut.getLastUpdated(wallets.deployer)).to.equal(round);
+        });
+
         describe("_canChangeLiquidity() == true", function () {
             it("Should revert if the user does not have enough shares", async function () {
                 const { sut } = await loadFixture(fixture);
@@ -257,6 +308,7 @@ describe("Liquidity", function () {
                 await sut.mockCanChangeLiquidity(true);
 
                 await sut.deposit(oneEther);
+                await sut.mockRound(2n);
                 await sut.withdraw(oneEther);
 
                 expect(await sut.getShares(wallets.deployer.address)).to.equal(0);
@@ -272,11 +324,13 @@ describe("Liquidity", function () {
                 await sut.mockCanChangeLiquidity(true);
 
                 await sut.deposit(oneEther);
+                await sut.mockRound(2n);
                 await sut.withdraw(oneEther / 4n);
 
                 expect(await sut.getShares(wallets.deployer.address)).to.equal((oneEther / 4n) * 3n);
                 expect(await sut.getTotalShares()).to.equal((oneEther / 4n) * 3n);
 
+                await sut.mockRound(3n);
                 await sut.withdraw((oneEther / 4n) * 3n);
 
                 expect(await sut.getShares(wallets.deployer.address)).to.equal(0);
@@ -292,6 +346,7 @@ describe("Liquidity", function () {
                 await sut.mockCanChangeLiquidity(true);
 
                 await sut.deposit(oneEther);
+                await sut.mockRound(2n);
 
                 await expect(sut.withdraw(oneEther))
                     .to.emit(sut, "LiquidityRemoved")
@@ -307,6 +362,7 @@ describe("Liquidity", function () {
                 await sut.mockCanChangeLiquidity(true);
 
                 await sut.deposit(oneEther);
+                await sut.mockRound(2n);
                 await sut.withdraw(oneEther);
 
                 expect(await sut.getAvailableLiquidity()).to.equal(0n);
@@ -341,6 +397,8 @@ describe("Liquidity", function () {
 
                 await sut.deposit(oneEther);
 
+                await sut.mockRound(2n);
+
                 await sut.mockCanChangeLiquidity(false);
 
                 await sut.withdraw(oneEther);
@@ -363,6 +421,7 @@ describe("Liquidity", function () {
                 await sut.deposit(oneEther);
 
                 await sut.mockCanChangeLiquidity(false);
+                await sut.mockRound(2n);
 
                 await expect(sut.withdraw(oneEther))
                     .to.emit(sut, "LiquidityChangeQueued")
@@ -418,6 +477,7 @@ describe("Liquidity", function () {
             await sut.mockCanChangeLiquidity(false);
 
             await sut.deposit(oneEther);
+            await sut.mockRound(2n);
             await sut.withdraw(oneEther);
 
             await sut.clearLiquidityQueue();
@@ -473,6 +533,8 @@ describe("Liquidity", function () {
                 await sut.connect(wallet).deposit(oneEther);
             }
 
+            await sut.mockRound(2n);
+
             for (const wallet of removes) {
                 await sut.connect(wallet).withdraw(oneEther);
             }
@@ -508,6 +570,7 @@ describe("Liquidity", function () {
             await sut.connect(wallets.alice).deposit(oneEther);
             await sut.connect(wallets.bob).deposit(oneEther);
             await sut.clearLiquidityQueue();
+            await sut.mockRound(2n);
 
             lq = await sut.getLiquidityQueue();
             expect(lq.length).to.equal(0);
@@ -526,6 +589,7 @@ describe("Liquidity", function () {
             await sut.connect(wallets.bob).withdraw(oneEther);
             await sut.connect(wallets.charlie).deposit(oneEther);
             await sut.clearLiquidityQueue();
+            await sut.mockRound(3n);
 
             lq = await sut.getLiquidityQueue();
             expect(lq.length).to.equal(0);
@@ -547,6 +611,7 @@ describe("Liquidity", function () {
             await sut.connect(wallets.alice).withdraw(oneEther);
             await sut.connect(wallets.charlie).withdraw(oneEther);
             await sut.clearLiquidityQueue();
+            await sut.mockRound(4n);
 
             lq = await sut.getLiquidityQueue();
             expect(lq.length).to.equal(0);
@@ -599,6 +664,8 @@ describe("Liquidity", function () {
                 ],
             ];
 
+            let nextRound = 2n;
+
             for (const queue of queues) {
                 for (const item of queue) {
                     if (item.action === 0) {
@@ -606,6 +673,8 @@ describe("Liquidity", function () {
                     } else {
                         await sut.connect(item.wallet).withdraw(item.amount);
                     }
+                    await sut.mockRound(nextRound);
+                    nextRound++;
                 }
                 await sut.clearLiquidityQueue();
             }
@@ -649,6 +718,7 @@ describe("Liquidity", function () {
             }
 
             await sut.clearLiquidityQueue();
+            await sut.mockRound(2n);
 
             expect(await sut.getTotalShares()).to.equal(10n * oneEther);
             expect(await token.balanceOf(sut.target)).to.equal(10n * oneEther);
@@ -702,6 +772,7 @@ describe("Liquidity", function () {
             }
 
             await sut.clearLiquidityQueue();
+            await sut.mockRound(2n);
 
             expect(await sut.getTotalShares()).to.equal(10n * oneEther);
             expect(await token.balanceOf(sut.target)).to.equal(10n * oneEther);

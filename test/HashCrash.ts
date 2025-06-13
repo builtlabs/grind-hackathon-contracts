@@ -1321,10 +1321,10 @@ describe("HashCrash", function () {
         });
 
         it("Should clear the liquidity queue", async function () {
-            const { sut, config } = await loadFixture(completedBetFixture);
+            const { sut, wallets, config } = await loadFixture(completedBetFixture);
 
-            await sut.deposit(oneEther);
-            await sut.withdraw(oneEther);
+            await sut.connect(wallets.alice).deposit(oneEther);
+            await sut.connect(wallets.bob).deposit(oneEther);
 
             const liquidityQueue = await sut.getLiquidityQueue();
             expect(liquidityQueue.length).to.equal(2);
@@ -1472,10 +1472,10 @@ describe("HashCrash", function () {
         });
 
         it("Should clear the liquidity queue", async function () {
-            const { sut, config } = await loadFixture(unrecoverableRoundFixture);
+            const { sut, wallets, config } = await loadFixture(unrecoverableRoundFixture);
 
-            await sut.deposit(oneEther);
-            await sut.withdraw(oneEther);
+            await sut.connect(wallets.alice).deposit(oneEther);
+            await sut.connect(wallets.bob).deposit(oneEther);
 
             const liquidityQueue = await sut.getLiquidityQueue();
             expect(liquidityQueue.length).to.equal(2);

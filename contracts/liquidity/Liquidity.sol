@@ -17,6 +17,7 @@ abstract contract Liquidity is ValueHolder {
     error InvalidMaxExposure();
     error InsufficientShares();
     error InsufficientLiquidity();
+    error OneChangePerRound();
 
     struct LiquidityDelta {
         uint8 action; // 0 = add, 1 = remove
@@ -24,16 +25,35 @@ abstract contract Liquidity is ValueHolder {
         uint256 amount;
     }
 
+    struct User {
+        uint192 shares;
+        uint64 lastUpdated;
+    }
+
     // #######################################################################################
 
     LiquidityDelta[] private _liquidityQueue;
     uint256 private _availableLiquidity;
 
-    mapping(address => uint256) private _userShares;
+    mapping(address => User) private _users;
     uint256 private _totalShares;
 
     uint128 private _maxExposureNumerator;
     uint128 private _lowLiquidityThreshold;
+
+    // #######################################################################################
+
+    modifier onlyChange() {
+        uint64 round = _getRound();
+
+        // Ensure that the user has not already made a change in this round.
+        if (_users[msg.sender].lastUpdated == round) revert OneChangePerRound();
+
+        // Update their last changed.
+        _users[msg.sender].lastUpdated = round;
+
+        _;
+    }
 
     // #######################################################################################
 
@@ -82,7 +102,12 @@ abstract contract Liquidity is ValueHolder {
 
     /// @notice Returns the number of shares held by the given user.
     function getShares(address _user) external view returns (uint256) {
-        return _userShares[_user];
+        return _users[_user].shares;
+    }
+
+    /// @notice Returns the last deposit round of the given user.
+    function getLastUpdated(address _user) external view returns (uint64) {
+        return _users[_user].lastUpdated;
     }
 
     /// @notice Returns the total number of shares across all users.
@@ -99,7 +124,7 @@ abstract contract Liquidity is ValueHolder {
 
     /// @notice Either deposits, or queues a deposit of the given amount by the sender.
     /// @param _amount The amount to deposit, must be greater than zero.
-    function deposit(uint256 _amount) external payable enforceMinimum(_amount) {
+    function deposit(uint256 _amount) external payable enforceMinimum(_amount) onlyChange {
         // Standardize behavior between native and ERC20 deposits.
         _receiveValue(msg.sender, _amount);
 
@@ -118,7 +143,7 @@ abstract contract Liquidity is ValueHolder {
 
     /// @notice Either withdraws, or queues a withdrawal of the given amount by the sender.
     /// @param _amount The amount to withdraw, must be greater than zero.
-    function withdraw(uint256 _amount) external notZero(_amount) {
+    function withdraw(uint256 _amount) external notZero(_amount) onlyChange {
         // If the contract can change liquidity immediately, remove the liquidity.
         if (_canChangeLiquidity()) {
             if (_removeLiquidity(msg.sender, _amount, _getAvailableBalance()) == 0) {
@@ -184,6 +209,8 @@ abstract contract Liquidity is ValueHolder {
 
     function _canChangeLiquidity() internal view virtual returns (bool);
 
+    function _getRound() internal view virtual returns (uint64);
+
     function _onLowLiquidity() internal virtual {
         // This function can be overridden by the parent contract to handle low liquidity situations.
         // For example, it could start the game early.
@@ -198,8 +225,9 @@ abstract contract Liquidity is ValueHolder {
 
     function _addLiquidity(address _user, uint256 _amount, uint256 _balance) private {
         uint256 newShares = _totalShares == 0 ? _amount : (_amount * _totalShares) / _balance;
+
         unchecked {
-            _userShares[_user] += newShares;
+            _users[_user].shares += uint192(newShares);
             _totalShares += newShares;
         }
 
@@ -210,14 +238,14 @@ abstract contract Liquidity is ValueHolder {
     }
 
     function _removeLiquidity(address _user, uint256 _amount, uint256 _balance) private returns (uint256) {
-        if (_userShares[_user] < _amount) {
+        if (_users[_user].shares < _amount) {
             // The user does not have enough shares to withdraw the requested amount, so we just ignore the request.
             return 0;
         }
 
         uint256 withdrawAmount = (_amount * _balance) / _totalShares;
         unchecked {
-            _userShares[_user] -= _amount;
+            _users[_user].shares -= uint192(_amount);
             _totalShares -= _amount;
         }
 
