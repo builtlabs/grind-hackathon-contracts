@@ -188,6 +188,48 @@ describe("HashCrash", function () {
 
     // ############################ TESTS ############################
 
+    describe("Integration Tests", function () {
+        it.only("Should not be possible to brick the reveal function using many bets", async function () {
+            const { sut, token, lootTable, config } = await loadFixture(liquidFixture);
+
+            const MaliciousBetter = await ethers.getContractFactory("MaliciousBetter");
+            const maliciousBetter = await MaliciousBetter.deploy(sut.target);
+            await maliciousBetter.waitForDeployment();
+
+            // NOTE: Abstract does not actually have a gas limit, but we still dont want this to be too expensive
+            const softcap = 30000000n;
+
+            const multibets = 5;
+
+            const betAmount = 100n;
+            const cashoutIndex = 10n;
+            const tokenPerBet = 1000n;
+
+            const totalAmount = tokenPerBet * betAmount;
+
+            await token.mint(maliciousBetter.target, totalAmount * BigInt(multibets));
+            await maliciousBetter.approve(token.target, totalAmount * BigInt(multibets));
+
+            for (let i = 0; i < multibets; i++) {
+                await maliciousBetter.multiBet(betAmount, totalAmount, cashoutIndex);
+                await maliciousBetter.multiCancel(Array.from({ length: Number(betAmount) }, (_, j) => j + (i * Number(betAmount))));
+            }
+
+            const length = Number(await lootTable.getLength());
+            await mine(config.introBlocks + length + 1);
+
+            const tx = await sut.reveal(config.genesisSalt, ethers.hexlify(ethers.randomBytes(32)));
+            const receipt = await tx.wait();
+
+            if (!receipt) {
+                throw new Error("Reveal failed");
+            }
+
+            console.log(`Reveal gas used: ${receipt.gasUsed.toString()} for ${multibets * Number(betAmount)} bets`);
+            expect(receipt.gasUsed).to.be.lessThan(softcap);
+        });
+    });
+
     describe("constructor", function () {
         it("Should set the owner address", async function () {
             const { sut, config } = await loadFixture(baseFixture);
@@ -1002,7 +1044,7 @@ describe("HashCrash", function () {
             const initialBalance = await token.balanceOf(wallets.deployer.address);
             const initialContractBalance = await token.balanceOf(sut.target);
 
-            const refunded = oneEther * config.cancelReturnNumerator / 10000n;
+            const refunded = (oneEther * config.cancelReturnNumerator) / 10000n;
 
             await sut.cancelBet(0);
 
