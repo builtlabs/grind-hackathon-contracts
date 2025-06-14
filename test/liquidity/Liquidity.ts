@@ -6,7 +6,7 @@ const lowLiquidityThreshold = ethers.parseEther("0.1");
 const minimumValue = ethers.parseEther("0.01");
 const oneEther = ethers.parseEther("1");
 
-const maxLiquidityQueueLength = 256;
+const _MAX_LIQUIDITY_QUEUE_SIZE = 256n;
 
 describe("Liquidity", function () {
     async function fixture() {
@@ -217,36 +217,22 @@ describe("Liquidity", function () {
             it("Should revert if the deposit exceeds the queue length", async function () {
                 const { sut, token, wallets } = await loadFixture(fixture);
 
-                let randomWallets = [];
-                for (let i = 0; i < maxLiquidityQueueLength; i++) {
-                    const randomWallet = ethers.Wallet.createRandom(ethers.provider);
-                    randomWallets.push(randomWallet);
-
-                    await wallets.deployer.sendTransaction({
-                        to: randomWallet.address,
-                        value: ethers.parseEther("0.1"),
-                    });
-
-                    await token.mint(randomWallet.address, oneEther);
-                    await token.connect(randomWallet).approve(sut.target, oneEther);
-                }
-
-                const amount = oneEther;
+                const amount = 1000n;
 
                 await sut.mockCanChangeLiquidity(false);
+                await sut.setMinimum(amount);
 
-                await ethers.provider.send("evm_setAutomine", [false]);
+                await token.mint(wallets.deployer.address, amount * _MAX_LIQUIDITY_QUEUE_SIZE);
+                await token.approve(sut.target, amount * _MAX_LIQUIDITY_QUEUE_SIZE);
 
-                for (let i = 0; i < maxLiquidityQueueLength; i++) {
-                    await sut.connect(randomWallets[i]).deposit(amount);
-                }
+                // Mock fill the liquidity queue to the maximum size
+                await sut.fillLiquidityQueue(amount, _MAX_LIQUIDITY_QUEUE_SIZE);
 
-                await ethers.provider.send("evm_mine");
+                const round = await sut.getMockRound();
+                await sut.mockRound(round + 1n);
 
-                await ethers.provider.send("evm_setAutomine", [true]);
-
-                await token.mint(wallets.deployer.address, oneEther);
-                await token.approve(sut.target, oneEther);
+                await token.mint(wallets.deployer.address, amount);
+                await token.approve(sut.target, amount);
                 await expect(sut.deposit(amount)).to.be.revertedWithCustomError(sut, "LiquidityQueueFull");
             });
 
@@ -413,8 +399,9 @@ describe("Liquidity", function () {
             it("Should revert if the withdraw exceeds the queue length", async function () {
                 const { sut, token, wallets } = await loadFixture(fixture);
 
-                const amount = oneEther;
+                const amount = 1000n;
 
+                await sut.setMinimum(amount);
                 await sut.mockCanChangeLiquidity(true);
 
                 await token.mint(wallets.deployer.address, amount);
@@ -425,29 +412,14 @@ describe("Liquidity", function () {
 
                 await sut.mockCanChangeLiquidity(false);
 
-                let randomWallets = [];
-                for (let i = 0; i < maxLiquidityQueueLength; i++) {
-                    const randomWallet = ethers.Wallet.createRandom(ethers.provider);
-                    randomWallets.push(randomWallet);
+                await token.mint(wallets.deployer.address, amount * _MAX_LIQUIDITY_QUEUE_SIZE);
+                await token.approve(sut.target, amount * _MAX_LIQUIDITY_QUEUE_SIZE);
 
-                    await wallets.deployer.sendTransaction({
-                        to: randomWallet.address,
-                        value: ethers.parseEther("0.1"),
-                    });
+                // Mock fill the liquidity queue to the maximum size
+                await sut.fillLiquidityQueue(amount, _MAX_LIQUIDITY_QUEUE_SIZE);
 
-                    await token.mint(randomWallet.address, oneEther);
-                    await token.connect(randomWallet).approve(sut.target, oneEther);
-                }
-
-                await ethers.provider.send("evm_setAutomine", [false]);
-
-                for (let i = 0; i < maxLiquidityQueueLength; i++) {
-                    await sut.connect(randomWallets[i]).deposit(amount);
-                }
-
-                await ethers.provider.send("evm_mine");
-
-                await ethers.provider.send("evm_setAutomine", [true]);
+                const round = await sut.getMockRound();
+                await sut.mockRound(round + 1n);
 
                 await expect(sut.withdraw(amount)).to.be.revertedWithCustomError(sut, "LiquidityQueueFull");
             });

@@ -23,6 +23,35 @@ contract LiquidityHarness is Liquidity, ERC20Holder {
 
     // #######################################################################################
 
+    function fillLiquidityQueue(uint256 _amount, uint256 _queueLength) external {
+        bool prev = canChangeLiquidity;
+        canChangeLiquidity = false;
+
+        for (uint256 i = 0; i < _queueLength; i++) {
+            (bool success, bytes memory data) = address(this).delegatecall(
+                abi.encodeWithSignature("deposit(uint256)", _amount, i)
+            );
+
+            if (!success) {
+                if (data.length > 0) {
+                    assembly {
+                        revert(add(data, 32), mload(data))
+                    }
+                } else {
+                    revert("Bet failed with no reason");
+                }
+            }
+
+            round++;
+        }
+
+        canChangeLiquidity = prev;
+    }
+
+    function getMockRound() external view returns (uint64) {
+        return round;
+    }
+
     function mockRound(uint64 _round) external {
         round = _round;
     }
