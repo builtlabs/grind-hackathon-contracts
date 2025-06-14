@@ -24,6 +24,10 @@ describe("HashCrashNative", function () {
         const nativeBlocking = await NativeBlocking.deploy();
         await nativeBlocking.waitForDeployment();
 
+        const NativeGasAbuser = await ethers.getContractFactory("NativeGasAbuser");
+        const nativeGasAbuser = await NativeGasAbuser.deploy();
+        await nativeGasAbuser.waitForDeployment();
+
         const FixedRTP10x = await ethers.getContractFactory("FixedRTP10x");
         const lootTable = await FixedRTP10x.deploy();
         await lootTable.waitForDeployment();
@@ -43,6 +47,7 @@ describe("HashCrashNative", function () {
             sut,
             lootTable,
             nativeBlocking,
+            nativeGasAbuser,
             wallets: {
                 deployer,
             },
@@ -322,7 +327,7 @@ describe("HashCrashNative", function () {
             expect(receipt.gasUsed).to.be.lessThan(softcap);
         });
 
-        it("Should not get bricked by a malicious winner", async function () {
+        it("Should not get bricked by a malicious winner using revert", async function () {
             const { sut, nativeBlocking, config } = await loadFixture(fixture);
 
             const liquidity = oneEther * 100n;
@@ -338,6 +343,29 @@ describe("HashCrashNative", function () {
 
             const calldata = sut.interface.encodeFunctionData("placeBet", [oneEther, 3]);
             await nativeBlocking.call(sut.target, calldata, { value: oneEther });
+
+            const length = await lootTable.getLength();
+            await mine(config.introBlocks + Number(length));
+
+            await expect(sut.reveal(config.genesisSalt, ethers.hexlify(ethers.randomBytes(32)))).to.not.be.reverted;
+        });
+
+        it("Should not get bricked by a malicious winner using infinite gas", async function () {
+            const { sut, nativeGasAbuser, config } = await loadFixture(fixture);
+
+            const liquidity = oneEther * 100n;
+
+            await sut.deposit(liquidity, { value: liquidity });
+            await sut.setActive(true);
+
+            const LootTable = await ethers.getContractFactory("NoDeathTable");
+            const lootTable = await LootTable.deploy();
+            await lootTable.waitForDeployment();
+
+            await sut.setLootTable(lootTable.target);
+
+            const calldata = sut.interface.encodeFunctionData("placeBet", [oneEther, 3]);
+            await nativeGasAbuser.call(sut.target, calldata, { value: oneEther });
 
             const length = await lootTable.getLength();
             await mine(config.introBlocks + Number(length));

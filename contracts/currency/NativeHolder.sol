@@ -59,7 +59,8 @@ abstract contract NativeHolder is ValueHolder {
     }
 
     function _sendValue(address _to, uint256 _value) internal override hasAvailableBalance(_value) {
-        (bool success, ) = _to.call{ value: _value }("");
+        // TODO: Double check this limit.
+        (bool success, ) = _to.call{ value: _value, gas: 80000 }("");
         if (!success) {
             // If the transfer fails, we assume the recipient is a contract that does not accept native currency.
             _stageAmount(_value);
