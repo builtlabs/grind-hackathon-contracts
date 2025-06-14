@@ -34,7 +34,8 @@ abstract contract Liquidity is ValueHolder {
 
     // #######################################################################################
 
-    LiquidityDelta[] private _liquidityQueue;
+    mapping(uint256 => LiquidityDelta) private _liquidityQueue;
+    uint256 private _liquidityQueueLength;
     uint256 private _availableLiquidity;
 
     mapping(address => User) private _users;
@@ -119,7 +120,13 @@ abstract contract Liquidity is ValueHolder {
 
     /// @notice Returns the current liquidity changes waiting to be applied.
     function getLiquidityQueue() external view returns (LiquidityDelta[] memory) {
-        return _liquidityQueue;
+        LiquidityDelta[] memory queue = new LiquidityDelta[](_liquidityQueueLength);
+
+        for (uint256 i = 0; i < _liquidityQueueLength; i++) {
+            queue[i] = _liquidityQueue[i];
+        }
+
+        return queue;
     }
 
     // #######################################################################################
@@ -169,7 +176,7 @@ abstract contract Liquidity is ValueHolder {
         // Cache the available balance to avoid multiple calls to _getAvailableBalance.
         uint256 _balance = _getAvailableBalance();
 
-        for (uint256 i = 0; i < _liquidityQueue.length; i++) {
+        for (uint256 i = 0; i < _liquidityQueueLength; i++) {
             LiquidityDelta memory delta = _liquidityQueue[i];
 
             if (delta.action == 0) {
@@ -182,7 +189,7 @@ abstract contract Liquidity is ValueHolder {
             }
         }
 
-        delete _liquidityQueue;
+        _liquidityQueueLength = 0;
 
         _resetLiquidity();
     }
@@ -221,9 +228,13 @@ abstract contract Liquidity is ValueHolder {
     // #######################################################################################
 
     function _queueLiquidityChange(uint8 _action, uint256 _amount) private {
-        if (_liquidityQueue.length == _MAX_LIQUIDITY_QUEUE_SIZE) revert LiquidityQueueFull();
+        if (_liquidityQueueLength == _MAX_LIQUIDITY_QUEUE_SIZE) revert LiquidityQueueFull();
 
-        _liquidityQueue.push(LiquidityDelta(_action, msg.sender, _amount));
+        _liquidityQueue[_liquidityQueueLength] = LiquidityDelta(_action, msg.sender, _amount);
+        unchecked {
+            _liquidityQueueLength++;
+        }
+
         emit LiquidityChangeQueued(_action, msg.sender, _amount);
     }
 
