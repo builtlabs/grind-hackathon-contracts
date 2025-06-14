@@ -8,6 +8,8 @@ const minimumValue = ethers.parseEther("0.001");
 const initialBalance = ethers.parseEther("1000");
 const oneEther = ethers.parseEther("1");
 
+const _MAX_BET_QUEUE_SIZE = 256n;
+
 function getHash(salt: string) {
     return ethers.keccak256(ethers.solidityPacked(["bytes32"], [salt]));
 }
@@ -880,6 +882,29 @@ describe("HashCrash", function () {
                     .to.emit(sut, "RoundStarted")
                     .withArgs(config.genesisHash, expectedStartBlock, 0);
             });
+        });
+
+        it("Should revert if the bet is beyond _MAX_BET_QUEUE_SIZE", async function () {
+            const { sut, token } = await loadFixture(liquidFixture);
+
+            const MaliciousBetter = await ethers.getContractFactory("MaliciousBetter");
+            const maliciousBetter = await MaliciousBetter.deploy(sut.target);
+            await maliciousBetter.waitForDeployment();
+
+            await token.mint(maliciousBetter.target, oneEther * 100n);
+            await maliciousBetter.approve(token.target, oneEther * 100n);
+
+            // Not important for this test
+            await sut.setMinimum(1n);
+
+            let remaining = _MAX_BET_QUEUE_SIZE;
+            while (remaining > 0n) {
+                const betAmount = remaining > 100n ? 100n : remaining;
+                await maliciousBetter.multiBet(betAmount, betAmount * 1000n, 10n);
+                remaining -= betAmount;
+            }
+
+            await expect(sut.placeBet(oneEther, 10)).to.be.revertedWithCustomError(sut, "RoundFullError");
         });
 
         it("Should revert if the round has already started", async function () {

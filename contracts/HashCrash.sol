@@ -8,7 +8,7 @@ import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
 /// @title HashCrash
 /// @notice The base hashcrash implementation, without specifying the value type.
 abstract contract HashCrash is Liquidity {
-    uint256 private constant DENOMINATOR = 10000;
+    uint256 private constant _MAX_BET_QUEUE_SIZE = 256;
 
     error NotActiveError();
 
@@ -18,6 +18,7 @@ abstract contract HashCrash is Liquidity {
 
     error NotHashProducerError();
 
+    error RoundFullError();
     error RoundInProgressError();
     error RoundNotStartedError();
 
@@ -223,7 +224,7 @@ abstract contract HashCrash is Liquidity {
     /// @param cancelReturnNumerator_ The new cancel return numerator.
     /// @dev The numerator must be less than or equal to the denominator (10000).
     function setCancelReturnNumerator(uint32 cancelReturnNumerator_) external onlyOwner {
-        if (cancelReturnNumerator_ > DENOMINATOR) revert InvalidCancelReturnNumeratorError();
+        if (cancelReturnNumerator_ > _DENOMINATOR) revert InvalidCancelReturnNumeratorError();
         _cancelReturnNumerator = cancelReturnNumerator_;
     }
 
@@ -268,6 +269,7 @@ abstract contract HashCrash is Liquidity {
         }
 
         // Ensure the bet is valid
+        if (_bets.length == _MAX_BET_QUEUE_SIZE) revert RoundFullError();
         if (_roundStartBlock <= block.number) revert RoundInProgressError();
         if (_lootTable.getLength() <= _autoCashout) revert InvalidCashoutIndexError();
 
@@ -461,6 +463,6 @@ abstract contract HashCrash is Liquidity {
     }
 
     function _getCancelReturn(uint256 _amount) private view returns (uint256) {
-        return (_amount * _cancelReturnNumerator) / DENOMINATOR;
+        return (_amount * _cancelReturnNumerator) / _DENOMINATOR;
     }
 }
