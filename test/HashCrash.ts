@@ -1298,6 +1298,23 @@ describe("HashCrash", function () {
             expect(newInfo[4].length).to.equal(0);
         });
 
+        it("Should clear the bet cancellations", async function () {
+            const { sut, lootTable, config } = await loadFixture(betFixture);
+
+            await sut.cancelBet(0);
+
+            const length = Number(await lootTable.getLength());
+            await mine(config.introBlocks + length + 1);
+
+            await sut.reveal(config.genesisSalt, config.genesisHash);
+
+            await sut.placeBet(oneEther, 10);
+
+            const newInfo = await sut.getRoundInfo();
+            expect(newInfo[4].length).to.equal(1);
+            expect(newInfo[4][0].cancelled).to.equal(false);
+        });
+
         it("Should clear the liquidity queue", async function () {
             const { sut, wallets, config } = await loadFixture(completedBetFixture);
 
