@@ -6,7 +6,7 @@ const lowLiquidityThreshold = ethers.parseEther("0.1");
 const minimumValue = ethers.parseEther("0.01");
 const oneEther = ethers.parseEther("1");
 
-const _MAX_LIQUIDITY_QUEUE_SIZE = 256n;
+const _MAX_LIQUIDITY_QUEUE_SIZE = 64n;
 
 describe("Liquidity", function () {
     async function fixture() {

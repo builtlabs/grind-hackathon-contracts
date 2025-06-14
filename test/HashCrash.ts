@@ -8,7 +8,7 @@ const minimumValue = ethers.parseEther("0.001");
 const initialBalance = ethers.parseEther("1000");
 const oneEther = ethers.parseEther("1");
 
-const _MAX_BET_QUEUE_SIZE = 256n;
+const _MAX_BET_QUEUE_SIZE = 128n;
 
 function getHash(salt: string) {
     return ethers.keccak256(ethers.solidityPacked(["bytes32"], [salt]));
@@ -191,104 +191,6 @@ describe("HashCrash", function () {
     }
 
     // ############################ TESTS ############################
-
-    describe("Integration Tests", function () {
-        it.skip("Should not be possible to brick the reveal function using many bets", async function () {
-            const { sut, token, lootTable, config } = await loadFixture(liquidFixture);
-
-            const MaliciousBetter = await ethers.getContractFactory("MaliciousBetter");
-            const maliciousBetter = await MaliciousBetter.deploy(sut.target);
-            await maliciousBetter.waitForDeployment();
-
-            await sut.setMinimum(1n);
-
-            // NOTE: Abstract does not actually have a gas limit, but we still dont want this to be too expensive
-            const softcap = 30000000n;
-
-            const multibets = 5;
-
-            const betAmount = 100n;
-            const cashoutIndex = 10n;
-            const tokenPerBet = 1000n;
-
-            const totalAmount = tokenPerBet * betAmount;
-
-            await token.mint(maliciousBetter.target, totalAmount * BigInt(multibets));
-            await maliciousBetter.approve(token.target, totalAmount * BigInt(multibets));
-
-            for (let i = 0; i < multibets; i++) {
-                await maliciousBetter.multiBet(betAmount, totalAmount, cashoutIndex);
-                await maliciousBetter.multiCancel(
-                    Array.from({ length: Number(betAmount) }, (_, j) => j + i * Number(betAmount))
-                );
-            }
-
-            const length = Number(await lootTable.getLength());
-            await mine(config.introBlocks + length + 1);
-
-            const tx = await sut.reveal(config.genesisSalt, ethers.hexlify(ethers.randomBytes(32)));
-            const receipt = await tx.wait();
-
-            if (!receipt) {
-                throw new Error("Reveal failed");
-            }
-
-            console.log(`Reveal gas used: ${receipt.gasUsed.toString()} for ${multibets * Number(betAmount)} bets`);
-            expect(receipt.gasUsed).to.be.lessThan(softcap);
-        });
-
-        it.skip("Should not be possible to brick the reveal function using the liquidity queue", async function () {
-            const { sut, token, lootTable, wallets, config } = await loadFixture(liquidFixture);
-
-            // Ignore this for now, in theory someone could be annoying regardless of value if they really wanted to
-            await sut.setMinimum(1n);
-
-            // NOTE: Abstract does not actually have a gas limit, but we still dont want this to be too expensive
-            const softcap = 30000000n;
-
-            const deposits = 256;
-
-            let randomWallets = [];
-            for (let i = 0; i < deposits; i++) {
-                const randomWallet = ethers.Wallet.createRandom(ethers.provider);
-                randomWallets.push(randomWallet);
-
-                await wallets.deployer.sendTransaction({
-                    to: randomWallet.address,
-                    value: ethers.parseEther("0.1"),
-                });
-
-                await token.mint(randomWallet.address, oneEther);
-                await token.connect(randomWallet).approve(sut.target, oneEther);
-            }
-
-            const amount = oneEther;
-
-            await sut.placeBet(amount, 1);
-
-            await ethers.provider.send("evm_setAutomine", [false]);
-
-            for (let i = 0; i < deposits; i++) {
-                await sut.connect(randomWallets[i]).deposit(amount);
-            }
-
-            await ethers.provider.send("evm_mine");
-
-            await ethers.provider.send("evm_setAutomine", [true]);
-
-            const length = Number(await lootTable.getLength());
-            await mine(config.introBlocks + length + 1);
-
-            const tx = await sut.reveal(config.genesisSalt, ethers.hexlify(ethers.randomBytes(32)));
-            const receipt = await tx.wait();
-
-            if (!receipt) {
-                throw new Error("Reveal failed");
-            }
-
-            expect(receipt.gasUsed).to.be.lessThan(softcap);
-        });
-    });
 
     describe("constructor", function () {
         it("Should set the owner address", async function () {
@@ -888,20 +790,19 @@ describe("HashCrash", function () {
             const { sut, token } = await loadFixture(liquidFixture);
 
             const MaliciousBetter = await ethers.getContractFactory("MaliciousBetter");
-            const maliciousBetter = await MaliciousBetter.deploy(sut.target);
+            const maliciousBetter = await MaliciousBetter.deploy();
             await maliciousBetter.waitForDeployment();
 
             await token.mint(maliciousBetter.target, oneEther * 100n);
-            await maliciousBetter.approve(token.target, oneEther * 100n);
 
             // Not important for this test
             await sut.setMinimum(1n);
 
             let remaining = _MAX_BET_QUEUE_SIZE;
             while (remaining > 0n) {
-                const betAmount = remaining > 100n ? 100n : remaining;
-                await maliciousBetter.multiBet(betAmount, betAmount * 1000n, 10n);
-                remaining -= betAmount;
+                const bets = remaining > 64n ? 64n : remaining;
+                await maliciousBetter.multiBet(sut.target, token.target, bets, 1000n, 10n);
+                remaining -= bets;
             }
 
             await expect(sut.placeBet(oneEther, 10)).to.be.revertedWithCustomError(sut, "RoundFullError");

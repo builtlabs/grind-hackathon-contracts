@@ -6,7 +6,7 @@ import { ValueHolder } from "../currency/ValueHolder.sol";
 /// @title Liquidity
 /// @notice A base contract for managing liquidity.
 abstract contract Liquidity is ValueHolder {
-    uint256 constant _MAX_LIQUIDITY_QUEUE_SIZE = 256;
+    uint256 constant _MAX_LIQUIDITY_QUEUE_SIZE = 64;
     uint256 constant _DENOMINATOR = 10000;
 
     // #######################################################################################

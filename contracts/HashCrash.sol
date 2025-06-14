@@ -8,7 +8,7 @@ import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
 /// @title HashCrash
 /// @notice The base hashcrash implementation, without specifying the value type.
 abstract contract HashCrash is Liquidity {
-    uint256 private constant _MAX_BET_QUEUE_SIZE = 256;
+    uint256 private constant _MAX_BET_QUEUE_SIZE = 128;
 
     error NotActiveError();
 
