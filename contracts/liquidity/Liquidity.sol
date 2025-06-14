@@ -146,15 +146,15 @@ abstract contract Liquidity is ValueHolder {
     /// @notice Either withdraws, or queues a withdrawal of the given amount by the sender.
     /// @param _amount The amount to withdraw, must be greater than zero.
     function withdraw(uint256 _amount) external notZero(_amount) onlyChange {
+        // Ensure the user has enough shares to withdraw.
+        if (_users[msg.sender].shares < _amount) revert InsufficientShares();
+
         // If the contract can change liquidity immediately, remove the liquidity.
         if (_canChangeLiquidity()) {
-            if (_removeLiquidity(msg.sender, _amount, _getAvailableBalance()) == 0) {
-                revert InsufficientShares();
-            }
-
+            _removeLiquidity(msg.sender, _amount, _getAvailableBalance());
             _resetLiquidity();
         } else {
-            // Otherwise, queue the liquidity change. We do not need to check for sufficient shares here.
+            // Otherwise, queue the liquidity change.
             _queueLiquidityChange(1, _amount);
         }
     }
@@ -242,11 +242,6 @@ abstract contract Liquidity is ValueHolder {
     }
 
     function _removeLiquidity(address _user, uint256 _amount, uint256 _balance) private returns (uint256) {
-        if (_users[_user].shares < _amount) {
-            // The user does not have enough shares to withdraw the requested amount, so we just ignore the request.
-            return 0;
-        }
-
         uint256 withdrawAmount = (_amount * _balance) / _totalShares;
         unchecked {
             _users[_user].shares -= uint192(_amount);
