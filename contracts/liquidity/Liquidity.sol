@@ -6,6 +6,7 @@ import { ValueHolder } from "../currency/ValueHolder.sol";
 /// @title Liquidity
 /// @notice A base contract for managing liquidity.
 abstract contract Liquidity is ValueHolder {
+    uint256 constant _MAX_LIQUIDITY_QUEUE_SIZE = 256;
     uint256 constant _DENOMINATOR = 10000;
 
     // #######################################################################################
@@ -14,10 +15,11 @@ abstract contract Liquidity is ValueHolder {
     event LiquidityRemoved(address indexed user, uint256 tokenDelta, uint256 shareDelta);
     event LiquidityChangeQueued(uint8 indexed action, address indexed user, uint256 amount);
 
+    error OneChangePerRound();
+    error LiquidityQueueFull();
     error InvalidMaxExposure();
     error InsufficientShares();
     error InsufficientLiquidity();
-    error OneChangePerRound();
 
     struct LiquidityDelta {
         uint8 action; // 0 = add, 1 = remove
@@ -219,6 +221,8 @@ abstract contract Liquidity is ValueHolder {
     // #######################################################################################
 
     function _queueLiquidityChange(uint8 _action, uint256 _amount) private {
+        if (_liquidityQueue.length == _MAX_LIQUIDITY_QUEUE_SIZE) revert LiquidityQueueFull();
+
         _liquidityQueue.push(LiquidityDelta(_action, msg.sender, _amount));
         emit LiquidityChangeQueued(_action, msg.sender, _amount);
     }

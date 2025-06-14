@@ -234,6 +234,58 @@ describe("HashCrash", function () {
             console.log(`Reveal gas used: ${receipt.gasUsed.toString()} for ${multibets * Number(betAmount)} bets`);
             expect(receipt.gasUsed).to.be.lessThan(softcap);
         });
+
+        it.skip("Should not be possible to brick the reveal function using the liquidity queue", async function () {
+            const { sut, token, lootTable, wallets, config } = await loadFixture(liquidFixture);
+
+            // Ignore this for now, in theory someone could be annoying regardless of value if they really wanted to
+            await sut.setMinimum(1n);
+
+            // NOTE: Abstract does not actually have a gas limit, but we still dont want this to be too expensive
+            const softcap = 30000000n;
+
+            const deposits = 256;
+
+            let randomWallets = [];
+            for (let i = 0; i < deposits; i++) {
+                const randomWallet = ethers.Wallet.createRandom(ethers.provider);
+                randomWallets.push(randomWallet);
+
+                await wallets.deployer.sendTransaction({
+                    to: randomWallet.address,
+                    value: ethers.parseEther("0.1"),
+                });
+
+                await token.mint(randomWallet.address, oneEther);
+                await token.connect(randomWallet).approve(sut.target, oneEther);
+            }
+
+            const amount = oneEther;
+
+            await sut.placeBet(amount, 1);
+
+            await ethers.provider.send("evm_setAutomine", [false]);
+
+            for (let i = 0; i < deposits; i++) {
+                await sut.connect(randomWallets[i]).deposit(amount);
+            }
+
+            await ethers.provider.send("evm_mine");
+
+            await ethers.provider.send("evm_setAutomine", [true]);
+
+            const length = Number(await lootTable.getLength());
+            await mine(config.introBlocks + length + 1);
+
+            const tx = await sut.reveal(config.genesisSalt, ethers.hexlify(ethers.randomBytes(32)));
+            const receipt = await tx.wait();
+
+            if (!receipt) {
+                throw new Error("Reveal failed");
+            }
+
+            expect(receipt.gasUsed).to.be.lessThan(softcap);
+        });
     });
 
     describe("constructor", function () {

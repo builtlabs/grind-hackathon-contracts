@@ -6,6 +6,8 @@ const lowLiquidityThreshold = ethers.parseEther("0.1");
 const minimumValue = ethers.parseEther("0.01");
 const oneEther = ethers.parseEther("1");
 
+const maxLiquidityQueueLength = 256;
+
 describe("Liquidity", function () {
     async function fixture() {
         const [deployer, alice, bob, charlie] = await ethers.getSigners();
@@ -212,6 +214,42 @@ describe("Liquidity", function () {
         });
 
         describe("_canChangeLiquidity() == false", function () {
+            it("Should revert if the deposit exceeds the queue length", async function () {
+                const { sut, token, wallets } = await loadFixture(fixture);
+
+                let randomWallets = [];
+                for (let i = 0; i < maxLiquidityQueueLength; i++) {
+                    const randomWallet = ethers.Wallet.createRandom(ethers.provider);
+                    randomWallets.push(randomWallet);
+
+                    await wallets.deployer.sendTransaction({
+                        to: randomWallet.address,
+                        value: ethers.parseEther("0.1"),
+                    });
+
+                    await token.mint(randomWallet.address, oneEther);
+                    await token.connect(randomWallet).approve(sut.target, oneEther);
+                }
+
+                const amount = oneEther;
+
+                await sut.mockCanChangeLiquidity(false);
+
+                await ethers.provider.send("evm_setAutomine", [false]);
+
+                for (let i = 0; i < maxLiquidityQueueLength; i++) {
+                    await sut.connect(randomWallets[i]).deposit(amount);
+                }
+
+                await ethers.provider.send("evm_mine");
+
+                await ethers.provider.send("evm_setAutomine", [true]);
+
+                await token.mint(wallets.deployer.address, oneEther);
+                await token.approve(sut.target, oneEther);
+                await expect(sut.deposit(amount)).to.be.revertedWithCustomError(sut, "LiquidityQueueFull");
+            });
+
             it("Should push the deposit into the liquidity queue", async function () {
                 const { sut, token, wallets } = await loadFixture(fixture);
 
@@ -370,6 +408,37 @@ describe("Liquidity", function () {
         });
 
         describe("_canChangeLiquidity() == false", function () {
+            it("Should revert if the withdraw exceeds the queue length", async function () {
+                const { sut, wallets } = await loadFixture(fixture);
+
+                let randomWallets = [];
+                for (let i = 0; i < maxLiquidityQueueLength; i++) {
+                    const randomWallet = ethers.Wallet.createRandom(ethers.provider);
+                    randomWallets.push(randomWallet);
+
+                    await wallets.deployer.sendTransaction({
+                        to: randomWallet.address,
+                        value: ethers.parseEther("0.1"),
+                    });
+                }
+
+                const amount = oneEther;
+
+                await sut.mockCanChangeLiquidity(false);
+
+                await ethers.provider.send("evm_setAutomine", [false]);
+
+                for (let i = 0; i < maxLiquidityQueueLength; i++) {
+                    await sut.connect(randomWallets[i]).withdraw(amount);
+                }
+
+                await ethers.provider.send("evm_mine");
+
+                await ethers.provider.send("evm_setAutomine", [true]);
+
+                await expect(sut.withdraw(amount)).to.be.revertedWithCustomError(sut, "LiquidityQueueFull");
+            });
+
             it("Should push the withdraw into the liquidity queue when the user has not deposited", async function () {
                 const { sut, token, wallets } = await loadFixture(fixture);
 
