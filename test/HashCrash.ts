@@ -800,7 +800,7 @@ describe("HashCrash", function () {
 
             let remaining = _MAX_BET_QUEUE_SIZE;
             while (remaining > 0n) {
-                const bets = remaining > 64n ? 64n : remaining;
+                const bets = remaining > 32n ? 32n : remaining;
                 await maliciousBetter.multiBet(sut.target, token.target, bets, 1000n, 10n);
                 remaining -= bets;
             }
