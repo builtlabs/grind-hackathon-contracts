@@ -54,6 +54,12 @@ abstract contract HashCrash is Liquidity {
         uint256 amount;
         address user;
         uint64 cashoutIndex;
+    }
+
+    struct BetOutput {
+        uint256 amount;
+        address user;
+        uint64 cashoutIndex;
         bool cancelled;
     }
 
@@ -65,6 +71,7 @@ abstract contract HashCrash is Liquidity {
     // #######################################################################################
 
     Bet[] private _bets;
+    uint256 private _betCancelledBitmap;
 
     bytes32 private _roundHash;
     address private _hashProducer;
@@ -143,7 +150,7 @@ abstract contract HashCrash is Liquidity {
     }
 
     /// @notice Returns all bets placed in the current round by the given user.
-    function getBetsFor(address _user) external view returns (Bet[] memory) {
+    function getBetsFor(address _user) external view returns (BetOutput[] memory) {
         uint256 count = 0;
 
         for (uint256 i = 0; i < _bets.length; i++) {
@@ -152,12 +159,17 @@ abstract contract HashCrash is Liquidity {
             }
         }
 
-        Bet[] memory userBets = new Bet[](count);
+        BetOutput[] memory userBets = new BetOutput[](count);
 
         count = 0;
         for (uint256 i = 0; i < _bets.length; i++) {
             if (_bets[i].user == _user) {
-                userBets[count] = _bets[i];
+                userBets[count] = BetOutput({
+                    amount: _bets[i].amount,
+                    user: _bets[i].user,
+                    cashoutIndex: _bets[i].cashoutIndex,
+                    cancelled: _getCancelled(i, _betCancelledBitmap)
+                });
                 count++;
             }
         }
@@ -180,7 +192,7 @@ abstract contract HashCrash is Liquidity {
             uint64 startBlock_,
             uint256 roundLiquidity_,
             bytes32 hash_,
-            Bet[] memory bets_,
+            BetOutput[] memory bets_,
             bytes32[] memory blockHashes_
         )
     {
@@ -188,7 +200,15 @@ abstract contract HashCrash is Liquidity {
         startBlock_ = _roundStartBlock;
         roundLiquidity_ = _getRoundLiquidity();
         hash_ = _roundHash;
-        bets_ = _bets;
+        bets_ = new BetOutput[](_bets.length);
+        for (uint256 i = 0; i < _bets.length; i++) {
+            bets_[i] = BetOutput({
+                amount: _bets[i].amount,
+                user: _bets[i].user,
+                cashoutIndex: _bets[i].cashoutIndex,
+                cancelled: _getCancelled(i, _betCancelledBitmap)
+            });
+        }
 
         if (_isIdle() || startBlock_ >= block.number) {
             blockHashes_ = new bytes32[](0);
@@ -283,14 +303,14 @@ abstract contract HashCrash is Liquidity {
         emit BetPlaced(_roundHash, _bets.length, msg.sender, _amount, _autoCashout);
 
         // Store the bet
-        _bets.push(Bet(_amount, msg.sender, _autoCashout, false));
+        _bets.push(Bet(_amount, msg.sender, _autoCashout));
     }
 
     /// @notice Updates the auto cashout index for a bet.
     /// @param _index The index of the bet to update.
     /// @param _autoCashout The new auto cashout index in the loot table.
     function updateBet(uint256 _index, uint64 _autoCashout) external {
-        Bet storage bet = _getBet(_index);
+        Bet storage bet = _getBet(_index, _betCancelledBitmap);
 
         // Ensure the update is valid
         if (_roundStartBlock <= block.number) revert RoundInProgressError();
@@ -310,13 +330,14 @@ abstract contract HashCrash is Liquidity {
     /// @notice Cancels a bet and refunds the user.
     /// @param _index The index of the bet to cancel.
     function cancelBet(uint256 _index) external {
-        Bet storage bet = _getBet(_index);
+        uint256 _bitmap = _betCancelledBitmap;
+        Bet storage bet = _getBet(_index, _bitmap);
 
         // Ensure the game has not started
         if (_roundStartBlock <= block.number) revert RoundInProgressError();
 
         // Cancel the bet
-        bet.cancelled = true;
+        _betCancelledBitmap = _setCancelled(_index, _bitmap);
 
         // Partially refund the user
         _sendValue(msg.sender, _getCancelReturn(bet.amount));
@@ -331,7 +352,7 @@ abstract contract HashCrash is Liquidity {
     /// @notice Allows a user to cash out their bet at the current block index.
     /// @param _index The index of the bet to cash out.
     function cashout(uint256 _index) external {
-        Bet storage bet = _getBet(_index);
+        Bet storage bet = _getBet(_index, _betCancelledBitmap);
 
         // Ensure the game has started
         uint64 _bn = uint64(block.number);
@@ -410,13 +431,25 @@ abstract contract HashCrash is Liquidity {
         return _roundStartBlock == 0;
     }
 
-    function _getBet(uint256 _index) private view returns (Bet storage bet_) {
+    function _getBet(uint256 _index, uint256 _bitmap) private view returns (Bet storage bet_) {
         if (_index >= _bets.length) revert BetNotFoundError();
 
         bet_ = _bets[_index];
 
         if (bet_.user != msg.sender) revert BetNotYoursError();
-        if (bet_.cancelled) revert BetCancelledError();
+        if (_getCancelled(_index, _bitmap)) revert BetCancelledError();
+    }
+
+    function _getCancelReturn(uint256 _amount) private view returns (uint256) {
+        return (_amount * _cancelReturnNumerator) / _DENOMINATOR;
+    }
+
+    function _getCancelled(uint256 _index, uint256 _bitmap) private pure returns (bool) {
+        return (_bitmap & (1 << _index)) != 0;
+    }
+
+    function _setCancelled(uint256 _index, uint256 _bitmap) private pure returns (uint256) {
+        return _bitmap |= (1 << _index);
     }
 
     function _initialiseRound() private {
@@ -438,11 +471,15 @@ abstract contract HashCrash is Liquidity {
     }
 
     function _processBets(uint64 _deadIndex) private {
-        for (uint256 i = 0; i < _bets.length; i++) {
-            Bet storage bet = _bets[i];
+        uint256 _bitmap = _betCancelledBitmap;
 
-            if (!bet.cancelled && bet.cashoutIndex < _deadIndex) {
-                _sendValue(bet.user, _lootTable.multiply(bet.amount, bet.cashoutIndex));
+        for (uint256 i = 0; i < _bets.length; i++) {
+            if (!_getCancelled(i, _bitmap)) {
+                Bet memory bet = _bets[i];
+
+                if (bet.cashoutIndex < _deadIndex) {
+                    _sendValue(bet.user, _lootTable.multiply(bet.amount, bet.cashoutIndex));
+                }
             }
         }
 
@@ -450,19 +487,15 @@ abstract contract HashCrash is Liquidity {
     }
 
     function _refundBets() private {
-        for (uint256 i = 0; i < _bets.length; i++) {
-            Bet storage bet = _bets[i];
+        uint256 _bitmap = _betCancelledBitmap;
 
-            if (!bet.cancelled) {
-                _sendValue(bet.user, bet.amount);
+        for (uint256 i = 0; i < _bets.length; i++) {
+            if (!_getCancelled(i, _bitmap)) {
+                _sendValue(_bets[i].user, _bets[i].amount);
                 emit BetCancelled(_roundHash, i);
             }
         }
 
         delete _bets;
-    }
-
-    function _getCancelReturn(uint256 _amount) private view returns (uint256) {
-        return (_amount * _cancelReturnNumerator) / _DENOMINATOR;
     }
 }
