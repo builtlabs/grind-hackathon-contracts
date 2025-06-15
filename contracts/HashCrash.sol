@@ -115,9 +115,29 @@ abstract contract HashCrash is Liquidity {
 
     // ########################################################################################
 
-    /// @notice Returns whether the game is active.
+    /// @notice Returns the current active state of the game.
     function getActive() external view returns (bool) {
         return _active;
+    }
+
+    /// @notice Returns the current hash index.
+    function getHashIndex() external view returns (uint64) {
+        return _hashIndex;
+    }
+
+    /// @notice Returns the current round start block.
+    function getRoundStartBlock() external view returns (uint64) {
+        return _roundStartBlock;
+    }
+
+    /// @notice Returns the current round hash.
+    function getRoundHash() external view returns (bytes32) {
+        return _roundHash;
+    }
+
+    /// @notice Returns the current hash producer address.
+    function getHashProducer() external view returns (address) {
+        return _hashProducer;
     }
 
     /// @notice Returns the current cancel return numerator.
@@ -125,29 +145,50 @@ abstract contract HashCrash is Liquidity {
         return _cancelReturnNumerator;
     }
 
-    /// @notice Returns the current loot table.
-    function getLootTable() external view returns (ILootTable) {
-        return _lootTable;
+    /// @notice Returns the current loot table address.
+    function getLootTable() external view returns (address) {
+        return address(_lootTable);
     }
 
-    /// @notice Returns the staged loot table, if any. It will be applied when the next round starts.
+    /// @notice Returns the staged loot table address.
     function getStagedLootTable() external view returns (address) {
         return _stagedLootTable;
     }
 
-    /// @notice Returns the current hash producer.
-    function getHashProducer() external view returns (address) {
-        return _hashProducer;
-    }
-
-    /// @notice Returns the number of blocks between the first bet and the start of the round.
+    /// @notice Returns the number of intro blocks before the round starts.
     function getIntroBlocks() external view returns (uint64) {
         return _introBlocks;
     }
 
-    /// @notice Returns the number of blocks the round intro is reduced to when it hits low liquidity.
+    /// @notice Returns the reduced number of intro blocks once low liquidity is hit.
     function getReducedIntroBlocks() external view returns (uint32) {
         return _reducedIntroBlocks;
+    }
+
+    /// @notice Returns the number of bets placed in the current round.
+    function getBetsLength() external view returns (uint256) {
+        return _betsLength;
+    }
+
+    /// @notice Gets the bet at the specified index.
+    function getBet(uint256 _index) external view returns (BetOutput memory) {
+        if (_index >= _betsLength) revert BetNotFoundError();
+
+        uint256 bitmap = _betCancelledBitmap;
+        Bet storage bet = _bets[_index];
+
+        return
+            BetOutput({
+                amount: bet.amount,
+                user: bet.user,
+                cashoutIndex: bet.cashoutIndex,
+                cancelled: _getCancelled(_index, bitmap)
+            });
+    }
+
+    /// @notice Returns the bets placed in the current round.
+    function getBets() external view returns (BetOutput[] memory) {
+        return _getBets();
     }
 
     /// @notice Returns all bets placed in the current round by the given user.
@@ -192,9 +233,16 @@ abstract contract HashCrash is Liquidity {
         return userBets;
     }
 
+    /// @notice Returns the current round block hashes.
+    function getBlockHashes() external view returns (bytes32[] memory) {
+        return _getBlockHashes(_roundStartBlock);
+    }
+
     /// @notice Returns the current round information.
+    /// @return active_ Whether the game is currently active.
     /// @return hashIndex_ The index of the current round hash.
     /// @return startBlock_ The block number when the current round started.
+    /// @return lootTable_ The loot table used for the current round.
     /// @return roundLiquidity_ The total liquidity available for the current round.
     /// @return hash_ The current round hash.
     /// @return bets_ An array of all bets placed in the current round.
@@ -203,55 +251,24 @@ abstract contract HashCrash is Liquidity {
         external
         view
         returns (
+            bool active_,
             uint64 hashIndex_,
             uint64 startBlock_,
+            ILootTable lootTable_,
             uint256 roundLiquidity_,
             bytes32 hash_,
             BetOutput[] memory bets_,
             bytes32[] memory blockHashes_
         )
     {
+        active_ = _active;
         hashIndex_ = _hashIndex;
         startBlock_ = _roundStartBlock;
+        lootTable_ = _lootTable;
         roundLiquidity_ = _getRoundLiquidity();
         hash_ = _roundHash;
-
-        uint256 bitmap = _betCancelledBitmap;
-        bets_ = new BetOutput[](_betsLength);
-        for (uint256 i = 0; i < bets_.length; ) {
-            Bet memory b = _bets[i];
-            bets_[i] = BetOutput({
-                amount: b.amount,
-                user: b.user,
-                cashoutIndex: b.cashoutIndex,
-                cancelled: _getCancelled(i, bitmap)
-            });
-
-            unchecked {
-                i++;
-            }
-        }
-
-        if (_isIdle() || startBlock_ >= block.number) {
-            blockHashes_ = new bytes32[](0);
-        } else {
-            uint64 lootTableLength = uint64(_lootTable.getLength());
-            uint64 length = uint64(block.number) - startBlock_;
-
-            if (length > lootTableLength) {
-                length = lootTableLength;
-            }
-
-            blockHashes_ = new bytes32[](length);
-
-            for (uint64 i = 0; i < length; ) {
-                blockHashes_[i] = blockhash(startBlock_ + i);
-
-                unchecked {
-                    i++;
-                }
-            }
-        }
+        bets_ = _getBets();
+        blockHashes_ = _getBlockHashes(startBlock_);
     }
 
     // ########################################################################################
@@ -453,6 +470,48 @@ abstract contract HashCrash is Liquidity {
     }
 
     // ########################################################################################
+
+    function _getBets() private view returns (BetOutput[] memory bets_) {
+        bets_ = new BetOutput[](_betsLength);
+
+        uint256 bitmap = _betCancelledBitmap;
+        for (uint256 i = 0; i < bets_.length; ) {
+            Bet memory b = _bets[i];
+            bets_[i] = BetOutput({
+                amount: b.amount,
+                user: b.user,
+                cashoutIndex: b.cashoutIndex,
+                cancelled: _getCancelled(i, bitmap)
+            });
+
+            unchecked {
+                i++;
+            }
+        }
+    }
+
+    function _getBlockHashes(uint64 startBlock) private view returns (bytes32[] memory blockHashes_) {
+        if (_isIdle() || startBlock >= block.number) {
+            blockHashes_ = new bytes32[](0);
+        } else {
+            uint64 lootTableLength = uint64(_lootTable.getLength());
+            uint64 length = uint64(block.number) - startBlock;
+
+            if (length > lootTableLength) {
+                length = lootTableLength;
+            }
+
+            blockHashes_ = new bytes32[](length);
+
+            for (uint64 i = 0; i < length; ) {
+                blockHashes_[i] = blockhash(startBlock + i);
+
+                unchecked {
+                    i++;
+                }
+            }
+        }
+    }
 
     function _isIdle() private view returns (bool) {
         return _roundStartBlock == 0;

@@ -107,8 +107,7 @@ describe("HashCrashERC20", function () {
         it("Should set the genesis hash", async function () {
             const { sut, config } = await loadFixture(fixture);
 
-            const roundInfo = await sut.getRoundInfo();
-            expect(roundInfo[3]).to.equal(config.genesisHash);
+            expect(await sut.getRoundHash()).to.equal(config.genesisHash);
         });
 
         it("Should set the hash producer", async function () {

@@ -176,8 +176,7 @@ describe("HashCrash", function () {
         const length = Number(await lootTable.getLength());
         await mine(config.introBlocks + length + 1); // + 1 otherwise cant read that final block hash
 
-        const info = await sut.getRoundInfo();
-        const deadIndex = await lootTable.getDeadIndex(config.genesisSalt, info[1]);
+        const deadIndex = await lootTable.getDeadIndex(config.genesisSalt, await sut.getRoundStartBlock());
 
         return { sut, lootTable, token, wallets, config: { ...config, deadIndex } };
     }
@@ -238,8 +237,7 @@ describe("HashCrash", function () {
         it("Should set the genesis hash", async function () {
             const { sut, config } = await loadFixture(baseFixture);
 
-            const roundInfo = await sut.getRoundInfo();
-            expect(roundInfo[3]).to.equal(config.genesisHash);
+            expect(await sut.getRoundHash()).to.equal(config.genesisHash);
         });
 
         it("Should set the hash producer", async function () {
@@ -295,6 +293,64 @@ describe("HashCrash", function () {
         });
     });
 
+    describe("getHashIndex", function () {
+        it("Should return zero by default", async function () {
+            const { sut } = await loadFixture(baseFixture);
+
+            expect(await sut.getHashIndex()).to.equal(0n);
+        });
+
+        it("Should return the hash index", async function () {
+            const { sut, config } = await loadFixture(completedBetFixture);
+
+            await sut.reveal(config.genesisSalt, config.genesisHash);
+
+            expect(await sut.getHashIndex()).to.equal(1n);
+        });
+    });
+
+    describe("getRoundStartBlock", function () {
+        it("Should return the start block at 0", async function () {
+            const { sut } = await loadFixture(baseFixture);
+
+            expect(await sut.getRoundStartBlock()).to.equal(0);
+        });
+
+        it("Should return the start block when set", async function () {
+            const { sut, config } = await loadFixture(liquidFixture);
+
+            await sut.placeBet(oneEther, 10);
+
+            const currentBlock = await ethers.provider.getBlockNumber();
+
+            expect(await sut.getRoundStartBlock()).to.equal(currentBlock + config.introBlocks);
+        });
+    });
+
+    describe("getRoundHash", function () {
+        it("Should return the round hash", async function () {
+            const { sut, config } = await loadFixture(baseFixture);
+
+            expect(await sut.getRoundHash()).to.equal(config.genesisHash);
+        });
+    });
+
+    describe("getHashProducer", function () {
+        it("Should return the hash producer", async function () {
+            const { sut, config } = await loadFixture(baseFixture);
+
+            expect(await sut.getHashProducer()).to.equal(config.hashProducer);
+        });
+    });
+
+    describe("getCancelReturnNumerator", function () {
+        it("Should return the cancel return numerator", async function () {
+            const { sut, config } = await loadFixture(baseFixture);
+
+            expect(await sut.getCancelReturnNumerator()).to.equal(config.cancelReturnNumerator);
+        });
+    });
+
     describe("getLootTable", function () {
         it("Should return the loot table", async function () {
             const { sut, lootTable } = await loadFixture(baseFixture);
@@ -320,14 +376,6 @@ describe("HashCrash", function () {
         });
     });
 
-    describe("getHashProducer", function () {
-        it("Should return the hash producer", async function () {
-            const { sut, config } = await loadFixture(baseFixture);
-
-            expect(await sut.getHashProducer()).to.equal(config.hashProducer);
-        });
-    });
-
     describe("getIntroBlocks", function () {
         it("Should return the set intro blocks", async function () {
             const { sut, config } = await loadFixture(baseFixture);
@@ -344,11 +392,66 @@ describe("HashCrash", function () {
         });
     });
 
-    describe("getCancelReturnNumerator", function () {
-        it("Should return the cancel return numerator", async function () {
-            const { sut, config } = await loadFixture(baseFixture);
+    describe("getBetsLength", function () {
+        it("Should return zero by default", async function () {
+            const { sut } = await loadFixture(baseFixture);
 
-            expect(await sut.getCancelReturnNumerator()).to.equal(config.cancelReturnNumerator);
+            expect(await sut.getBetsLength()).to.equal(0n);
+        });
+
+        it("Should return the number of bets", async function () {
+            const { sut } = await loadFixture(liquidFixture);
+
+            await sut.placeBet(oneEther, 10);
+            await sut.placeBet(oneEther, 9);
+
+            expect(await sut.getBetsLength()).to.equal(2n);
+        });
+    });
+
+    describe("getBet", function () {
+        it("Should revert if the bet does not exist", async function () {
+            const { sut } = await loadFixture(baseFixture);
+
+            await expect(sut.getBet(0n)).to.be.revertedWithCustomError(sut, "BetNotFoundError");
+        });
+
+        it("Should return the bet", async function () {
+            const { sut, wallets } = await loadFixture(liquidFixture);
+
+            const cashoutIndex = 10;
+            await sut.placeBet(oneEther, cashoutIndex);
+
+            const bet = await sut.getBet(0n);
+
+            expect(bet.amount).to.equal(oneEther);
+            expect(bet.cashoutIndex).to.equal(cashoutIndex);
+            expect(bet.user).to.equal(wallets.deployer.address);
+            expect(bet.cancelled).to.equal(false);
+        });
+    });
+
+    describe("getBets", function () {
+        it("Should return an empty array by default", async function () {
+            const { sut } = await loadFixture(baseFixture);
+
+            expect(await sut.getBets()).to.deep.equal([]);
+        });
+
+        it("Should return the bets", async function () {
+            const { sut, wallets } = await loadFixture(liquidFixture);
+
+            const cashoutIndex = 10;
+
+            await sut.placeBet(oneEther, cashoutIndex);
+
+            const bets = await sut.getBets();
+            expect(bets.length).to.equal(1);
+
+            expect(bets[0].user).to.equal(wallets.deployer.address);
+            expect(bets[0].amount).to.equal(oneEther);
+            expect(bets[0].cashoutIndex).to.equal(cashoutIndex);
+            expect(bets[0].cancelled).to.equal(false);
         });
     });
 
@@ -377,13 +480,128 @@ describe("HashCrash", function () {
         });
     });
 
+    describe("getBlockHashes", function () {
+        it("Should return no block hashes when the round is idle", async function () {
+            const { sut } = await loadFixture(baseFixture);
+
+            expect(await sut.getBlockHashes()).to.deep.equal([]);
+        });
+
+        it("Should return no block hashes before the start block", async function () {
+            const { sut } = await loadFixture(liquidFixture);
+
+            await sut.placeBet(oneEther, 10);
+
+            expect(await sut.getBlockHashes()).to.deep.equal([]);
+        });
+
+        it("Should return no block hashes on the start block", async function () {
+            const { sut, config } = await loadFixture(liquidFixture);
+
+            await sut.placeBet(oneEther, 10);
+
+            await mine(config.introBlocks);
+
+            expect(await ethers.provider.getBlockNumber()).to.equal(await sut.getRoundStartBlock());
+            expect(await sut.getBlockHashes()).to.deep.equal([]);
+        });
+
+        it("Should return all block hashes between the start block (inc) and current block (exc)", async function () {
+            const { sut, config } = await loadFixture(liquidFixture);
+
+            const amount = 5;
+
+            await sut.placeBet(oneEther, 10);
+
+            await mine(config.introBlocks);
+
+            const startBlock = await ethers.provider.getBlockNumber();
+
+            await mine(amount);
+
+            const blockHashes = await sut.getBlockHashes();
+            expect(blockHashes.length).to.equal(amount);
+            for (let i = 0; i < amount; i++) {
+                expect(blockHashes[i]).to.equal(await ethers.provider.getBlock(startBlock + i).then((b) => b!.hash));
+            }
+        });
+
+        it("Should return at max, loot table length block hashes", async function () {
+            const { sut, lootTable, config } = await loadFixture(liquidFixture);
+
+            await sut.placeBet(oneEther, 10);
+
+            await mine(config.introBlocks);
+
+            const startBlock = await ethers.provider.getBlockNumber();
+
+            const lootTableLength = Number(await lootTable.getLength());
+            await mine(lootTableLength * 2);
+
+            const blockHashes = await sut.getBlockHashes();
+            expect(blockHashes.length).to.equal(lootTableLength);
+            for (let i = 0; i < lootTableLength; i++) {
+                expect(blockHashes[i]).to.equal(await ethers.provider.getBlock(startBlock + i).then((b) => b!.hash));
+            }
+        });
+
+        it("Should return bytes32(0) when the hashes are no longer available", async function () {
+            const { sut, lootTable } = await loadFixture(liquidFixture);
+
+            await sut.placeBet(oneEther, 10);
+
+            await mine(1000);
+
+            const lootTableLength = Number(await lootTable.getLength());
+            const blockHashes = await sut.getBlockHashes();
+            expect(blockHashes.length).to.equal(lootTableLength);
+            for (let i = 0; i < lootTableLength; i++) {
+                expect(blockHashes[i]).to.equal("0x0000000000000000000000000000000000000000000000000000000000000000");
+            }
+        });
+    });
+
     describe("getRoundInfo", function () {
+        describe("active_", function () {
+            it("Should return false by default", async function () {
+                const { sut } = await loadFixture(baseFixture);
+
+                const roundInfo = await sut.getRoundInfo();
+                expect(roundInfo.active_).to.equal(false);
+            });
+
+            it("Should return the set _active value", async function () {
+                const { sut } = await loadFixture(activeFixture);
+
+                const roundInfo = await sut.getRoundInfo();
+                expect(roundInfo.active_).to.equal(true);
+            });
+        });
+
+        describe("hashIndex_", function () {
+            it("Should return zero by default", async function () {
+                const { sut } = await loadFixture(baseFixture);
+
+                const roundInfo = await sut.getRoundInfo();
+                expect(roundInfo.hashIndex_).to.equal(0n);
+            });
+
+            it("Should return the hash index", async function () {
+                const { sut, config } = await loadFixture(completedBetFixture);
+
+                await sut.reveal(config.genesisSalt, config.genesisHash);
+
+                const roundInfo = await sut.getRoundInfo();
+                expect(roundInfo.hashIndex_).to.equal(1n);
+            });
+        });
+
         describe("startBlock_", function () {
             it("Should return the start block at 0", async function () {
                 const { sut } = await loadFixture(baseFixture);
 
                 const roundInfo = await sut.getRoundInfo();
-                expect(roundInfo[1]).to.equal(0);
+                expect(roundInfo.startBlock_).to.equal(0);
             });
 
             it("Should return the start block when set", async function () {
@@ -394,7 +612,16 @@ describe("HashCrash", function () {
                 const currentBlock = await ethers.provider.getBlockNumber();
                 const roundInfo = await sut.getRoundInfo();
 
-                expect(roundInfo[1]).to.equal(currentBlock + config.introBlocks);
+                expect(roundInfo.startBlock_).to.equal(currentBlock + config.introBlocks);
+            });
+        });
+
+        describe("lootTable_", function () {
+            it("Should return the loot table", async function () {
+                const { sut, lootTable } = await loadFixture(baseFixture);
+
+                const roundInfo = await sut.getRoundInfo();
+                expect(roundInfo.lootTable_).to.equal(lootTable.target);
             });
         });
 
@@ -403,7 +630,7 @@ describe("HashCrash", function () {
                 const { sut } = await loadFixture(baseFixture);
 
                 const roundInfo = await sut.getRoundInfo();
-                expect(roundInfo[1]).to.equal(0);
+                expect(roundInfo.roundLiquidity_).to.equal(0);
             });
 
             it("Should return the round liquidity when set", async function () {
@@ -412,7 +639,7 @@ describe("HashCrash", function () {
                 await sut.deposit(oneEther);
 
                 const roundInfo = await sut.getRoundInfo();
-                expect(roundInfo[2]).to.equal(config.liquidityPerRound(oneEther));
+                expect(roundInfo.roundLiquidity_).to.equal(config.liquidityPerRound(oneEther));
             });
         });
 
@@ -421,7 +648,7 @@ describe("HashCrash", function () {
                 const { sut, config } = await loadFixture(baseFixture);
 
                 const roundInfo = await sut.getRoundInfo();
-                expect(roundInfo[3]).to.equal(config.genesisHash);
+                expect(roundInfo.hash_).to.equal(config.genesisHash);
             });
         });
 
@@ -430,7 +657,7 @@ describe("HashCrash", function () {
                 const { sut } = await loadFixture(baseFixture);
 
                 const roundInfo = await sut.getRoundInfo();
-                expect(roundInfo[4]).to.deep.equal([]);
+                expect(roundInfo.bets_).to.deep.equal([]);
             });
 
             it("Should return the bets", async function () {
@@ -441,13 +668,12 @@ describe("HashCrash", function () {
                 await sut.placeBet(oneEther, cashoutIndex);
 
                 const roundInfo = await sut.getRoundInfo();
-                const bets = roundInfo[4];
-                expect(bets.length).to.equal(1);
+                expect(roundInfo.bets_.length).to.equal(1);
 
-                expect(bets[0].user).to.equal(wallets.deployer.address);
-                expect(bets[0].amount).to.equal(oneEther);
-                expect(bets[0].cashoutIndex).to.equal(cashoutIndex);
-                expect(bets[0].cancelled).to.equal(false);
+                expect(roundInfo.bets_[0].user).to.equal(wallets.deployer.address);
+                expect(roundInfo.bets_[0].amount).to.equal(oneEther);
+                expect(roundInfo.bets_[0].cashoutIndex).to.equal(cashoutIndex);
+                expect(roundInfo.bets_[0].cancelled).to.equal(false);
             });
         });
 
@@ -456,7 +682,7 @@ describe("HashCrash", function () {
                 const { sut } = await loadFixture(baseFixture);
 
                 const roundInfo = await sut.getRoundInfo();
-                expect(roundInfo[5]).to.deep.equal([]);
+                expect(roundInfo.blockHashes_).to.deep.equal([]);
             });
 
             it("Should return no block hashes before the start block", async function () {
@@ -465,7 +691,7 @@ describe("HashCrash", function () {
                 await sut.placeBet(oneEther, 10);
 
                 const roundInfo = await sut.getRoundInfo();
-                expect(roundInfo[5]).to.deep.equal([]);
+                expect(roundInfo.blockHashes_).to.deep.equal([]);
             });
 
             it("Should return no block hashes on the start block", async function () {
@@ -477,8 +703,8 @@ describe("HashCrash", function () {
 
                 const roundInfo = await sut.getRoundInfo();
 
-                expect(await ethers.provider.getBlockNumber()).to.equal(roundInfo[1]);
-                expect(roundInfo[5]).to.deep.equal([]);
+                expect(await ethers.provider.getBlockNumber()).to.equal(roundInfo.startBlock_);
+                expect(roundInfo.blockHashes_).to.deep.equal([]);
             });
 
             it("Should return all block hashes between the start block (inc) and current block (exc)", async function () {
@@ -495,9 +721,9 @@ describe("HashCrash", function () {
                 await mine(amount);
 
                 const roundInfo = await sut.getRoundInfo();
-                expect(roundInfo[5].length).to.equal(amount);
+                expect(roundInfo.blockHashes_.length).to.equal(amount);
                 for (let i = 0; i < amount; i++) {
-                    expect(roundInfo[5][i]).to.equal(
+                    expect(roundInfo.blockHashes_[i]).to.equal(
                         await ethers.provider.getBlock(startBlock + i).then((b) => b!.hash)
                     );
                 }
@@ -516,9 +742,9 @@ describe("HashCrash", function () {
                 await mine(lootTableLength * 2);
 
                 const roundInfo = await sut.getRoundInfo();
-                expect(roundInfo[5].length).to.equal(lootTableLength);
+                expect(roundInfo.blockHashes_.length).to.equal(lootTableLength);
                 for (let i = 0; i < lootTableLength; i++) {
-                    expect(roundInfo[5][i]).to.equal(
+                    expect(roundInfo.blockHashes_[i]).to.equal(
                         await ethers.provider.getBlock(startBlock + i).then((b) => b!.hash)
                     );
                 }
@@ -533,9 +759,9 @@ describe("HashCrash", function () {
 
                 const lootTableLength = Number(await lootTable.getLength());
                 const roundInfo = await sut.getRoundInfo();
-                expect(roundInfo[5].length).to.equal(lootTableLength);
+                expect(roundInfo.blockHashes_.length).to.equal(lootTableLength);
                 for (let i = 0; i < lootTableLength; i++) {
-                    expect(roundInfo[5][i]).to.equal(
+                    expect(roundInfo.blockHashes_[i]).to.equal(
                         "0x0000000000000000000000000000000000000000000000000000000000000000"
                     );
                 }
@@ -770,8 +996,7 @@ describe("HashCrash", function () {
                 await sut.placeBet(oneEther, 10);
                 const currentBlock = await ethers.provider.getBlockNumber();
 
-                const roundInfo = await sut.getRoundInfo();
-                expect(roundInfo[1]).to.equal(currentBlock + config.introBlocks);
+                expect(await sut.getRoundStartBlock()).to.equal(currentBlock + config.introBlocks);
             });
 
             it("Should emit RoundStarted", async function () {
@@ -854,13 +1079,11 @@ describe("HashCrash", function () {
 
             const maxWin = await lootTable.multiply(oneEther, cashout);
 
-            const initialInfo = await sut.getRoundInfo();
+            const initialLiquidity = await sut.getAvailableLiquidity();
 
             await sut.placeBet(oneEther, cashout);
 
-            const roundInfo = await sut.getRoundInfo();
-
-            expect(roundInfo[2]).to.equal(initialInfo[2] - maxWin);
+            expect(await sut.getAvailableLiquidity()).to.equal(initialLiquidity - maxWin);
         });
 
         it("Should store the bet", async function () {
@@ -942,14 +1165,14 @@ describe("HashCrash", function () {
         it("Should use the correct amount of round liquidity", async function () {
             const { sut, lootTable, config } = await loadFixture(betFixture);
 
-            const initialRoundLiquidity = (await sut.getRoundInfo())[2];
+            const initialRoundLiquidity = await sut.getAvailableLiquidity();
             const initialLiquidity = await lootTable.multiply(config.bets[0].amount, config.bets[0].cashoutIndex);
 
             const newCashoutIndex = config.bets[0].cashoutIndex - 1;
 
             await sut.updateBet(0, newCashoutIndex);
 
-            const newRoundLiquidity = (await sut.getRoundInfo())[2];
+            const newRoundLiquidity = await sut.getAvailableLiquidity();
             const newLiquidity = await lootTable.multiply(config.bets[0].amount, newCashoutIndex);
 
             expect(newRoundLiquidity).to.equal(initialRoundLiquidity + initialLiquidity - newLiquidity);
@@ -1049,12 +1272,12 @@ describe("HashCrash", function () {
         it("Should release the round liquidity", async function () {
             const { sut, lootTable, config } = await loadFixture(betFixture);
 
-            const initialRoundLiquidity = (await sut.getRoundInfo())[2];
+            const initialRoundLiquidity = await sut.getAvailableLiquidity();
             const initialLiquidity = await lootTable.multiply(config.bets[0].amount, config.bets[0].cashoutIndex);
 
             await sut.cancelBet(0);
 
-            const newRoundLiquidity = (await sut.getRoundInfo())[2];
+            const newRoundLiquidity = await sut.getAvailableLiquidity();
 
             expect(newRoundLiquidity).to.equal(initialRoundLiquidity + initialLiquidity);
         });
@@ -1181,8 +1404,7 @@ describe("HashCrash", function () {
 
             await mine(config.introBlocks + length + 1);
 
-            const info = await sut.getRoundInfo();
-            const deadIndex = await lootTable.getDeadIndex(config.genesisSalt, info[1]);
+            const deadIndex = await lootTable.getDeadIndex(config.genesisSalt, await sut.getRoundStartBlock());
 
             const sutBalanceBefore = await token.balanceOf(sut.target);
             const beforeBalances = await Promise.all(config.bets.map((b) => token.balanceOf(b.wallet.address)));
@@ -1209,8 +1431,7 @@ describe("HashCrash", function () {
 
             await mine(config.introBlocks + length + 1);
 
-            const info = await sut.getRoundInfo();
-            const deadIndex = await lootTable.getDeadIndex(config.genesisSalt, info[1]);
+            const deadIndex = await lootTable.getDeadIndex(config.genesisSalt, await sut.getRoundStartBlock());
 
             expect(deadIndex).to.equal(length);
 
@@ -1244,8 +1465,7 @@ describe("HashCrash", function () {
 
             await mine(config.introBlocks + length - cancelToExc + 1);
 
-            const info = await sut.getRoundInfo();
-            const deadIndex = await lootTable.getDeadIndex(config.genesisSalt, info[1]);
+            const deadIndex = await lootTable.getDeadIndex(config.genesisSalt, await sut.getRoundStartBlock());
 
             const sutBalanceBefore = await token.balanceOf(sut.target);
             const beforeBalances = await Promise.all(config.bets.map((b) => token.balanceOf(b.wallet.address)));
@@ -1272,8 +1492,7 @@ describe("HashCrash", function () {
 
             await mine(config.introBlocks + length + 1);
 
-            const info = await sut.getRoundInfo();
-            const deadIndex = Number(await lootTable.getDeadIndex(config.genesisSalt, info[1]));
+            const deadIndex = Number(await lootTable.getDeadIndex(config.genesisSalt, await sut.getRoundStartBlock()));
 
             const beforeBalances = await Promise.all(config.bets.map((b) => token.balanceOf(b.wallet.address)));
 
@@ -1289,13 +1508,11 @@ describe("HashCrash", function () {
         it("Should clear the bets", async function () {
             const { sut, config } = await loadFixture(completedBetFixture);
 
-            const info = await sut.getRoundInfo();
-            expect(info[4].length).to.equal(config.bets.length);
+            expect(await sut.getBetsLength()).to.equal(config.bets.length);
 
             await sut.reveal(config.genesisSalt, nextHash);
 
-            const newInfo = await sut.getRoundInfo();
-            expect(newInfo[4].length).to.equal(0);
+            expect(await sut.getBetsLength()).to.equal(0);
         });
 
         it("Should clear the bet cancellations", async function () {
@@ -1310,9 +1527,9 @@ describe("HashCrash", function () {
 
             await sut.placeBet(oneEther, 10);
 
-            const newInfo = await sut.getRoundInfo();
-            expect(newInfo[4].length).to.equal(1);
-            expect(newInfo[4][0].cancelled).to.equal(false);
+            const bets = await sut.getBets();
+            expect(bets.length).to.equal(1);
+            expect(bets[0].cancelled).to.equal(false);
         });
 
         it("Should clear the liquidity queue", async function () {
@@ -1343,8 +1560,7 @@ describe("HashCrash", function () {
 
             await sut.reveal(config.genesisSalt, nextHash);
 
-            const roundInfo = await sut.getRoundInfo();
-            expect(roundInfo[1]).to.equal(0);
+            expect(await sut.getRoundStartBlock()).to.equal(0);
         });
 
         it("Should set the new round hash", async function () {
@@ -1352,18 +1568,17 @@ describe("HashCrash", function () {
 
             await sut.reveal(config.genesisSalt, nextHash);
 
-            const roundInfo = await sut.getRoundInfo();
-            expect(roundInfo[3]).to.equal(nextHash);
+            expect(await sut.getRoundHash()).to.equal(nextHash);
         });
 
         it("Should increment the hashIndex", async function () {
             const { sut, config } = await loadFixture(completedBetFixture);
 
-            const previous = (await sut.getRoundInfo())[0];
+            const previous = await sut.getHashIndex();
 
             await sut.reveal(config.genesisSalt, nextHash);
 
-            expect((await sut.getRoundInfo())[0]).to.equal(previous + 1n);
+            expect(await sut.getHashIndex()).to.equal(previous + 1n);
         });
     });
 
@@ -1445,13 +1660,11 @@ describe("HashCrash", function () {
         it("Should clear the bets", async function () {
             const { sut, config } = await loadFixture(unrecoverableRoundFixture);
 
-            const info = await sut.getRoundInfo();
-            expect(info[4].length).to.equal(config.bets.length);
+            expect(await sut.getBetsLength()).to.equal(config.bets.length);
 
             await sut.emergencyRefund();
 
-            const newInfo = await sut.getRoundInfo();
-            expect(newInfo[4].length).to.equal(0);
+            expect(await sut.getBetsLength()).to.equal(0);
         });
 
         it("Should clear the liquidity queue", async function () {
@@ -1480,8 +1693,7 @@ describe("HashCrash", function () {
 
             await sut.emergencyRefund();
 
-            const roundInfo = await sut.getRoundInfo();
-            expect(roundInfo[1]).to.equal(0);
+            expect(await sut.getRoundStartBlock()).to.equal(0);
         });
 
         it("Should set active to false", async function () {
@@ -1497,18 +1709,17 @@ describe("HashCrash", function () {
 
             await sut.emergencyRefund();
 
-            const roundInfo = await sut.getRoundInfo();
-            expect(roundInfo[3]).to.equal(config.genesisHash);
+            expect(await sut.getRoundHash()).to.equal(config.genesisHash);
         });
 
         it("Should keep the same hash index", async function () {
             const { sut } = await loadFixture(unrecoverableRoundFixture);
 
-            const previous = (await sut.getRoundInfo())[0];
+            const previous = await sut.getHashIndex();
 
             await sut.emergencyRefund();
 
-            expect((await sut.getRoundInfo())[0]).to.equal(previous);
+            expect(await sut.getHashIndex()).to.equal(previous);
         });
     });
 
@@ -1516,13 +1727,11 @@ describe("HashCrash", function () {
         it("Should do nothing if the start block is zero", async function () {
             const { sut } = await loadFixture(liquidFixture);
 
-            const roundInfo = await sut.getRoundInfo();
-            expect(roundInfo[1]).to.equal(0);
+            expect(await sut.getRoundStartBlock()).to.equal(0);
 
             await sut.callOnLowLiquidity();
 
-            const newRoundInfo = await sut.getRoundInfo();
-            expect(newRoundInfo[1]).to.equal(0);
+            expect(await sut.getRoundStartBlock()).to.equal(0);
         });
 
         it("Should do nothing if the start block is already below the reduced value", async function () {
@@ -1533,13 +1742,11 @@ describe("HashCrash", function () {
 
             await mine(config.introBlocks - config.reducedIntroBlocks);
 
-            const roundInfo = await sut.getRoundInfo();
-            expect(roundInfo[1]).to.equal(startblock);
+            expect(await sut.getRoundStartBlock()).to.equal(startblock);
 
             await sut.callOnLowLiquidity();
 
-            const newRoundInfo = await sut.getRoundInfo();
-            expect(newRoundInfo[1]).to.equal(startblock);
+            expect(await sut.getRoundStartBlock()).to.equal(startblock);
         });
 
         it("Should set the round start block to the new reduced value", async function () {
@@ -1548,14 +1755,12 @@ describe("HashCrash", function () {
             await sut.placeBet(oneEther, 10);
             const startblock = (await ethers.provider.getBlockNumber()) + config.introBlocks;
 
-            const roundInfo = await sut.getRoundInfo();
-            expect(roundInfo[1]).to.equal(startblock);
+            expect(await sut.getRoundStartBlock()).to.equal(startblock);
 
             await sut.callOnLowLiquidity();
             const newStartBlock = (await ethers.provider.getBlockNumber()) + config.reducedIntroBlocks;
 
-            const newRoundInfo = await sut.getRoundInfo();
-            expect(newRoundInfo[1]).to.equal(newStartBlock);
+            expect(await sut.getRoundStartBlock()).to.equal(newStartBlock);
         });
 
         it("Should emit RoundAccelerated", async function () {
