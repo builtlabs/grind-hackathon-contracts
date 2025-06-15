@@ -17,10 +17,12 @@ contract PlatformInterface is Ownable {
     error InvalidValueError();
     error ReservedIndexError();
     error AlreadyReferredError();
+    error NotCurrentSeasonError();
     error FailedToSendNativeError();
 
     event PlatformSet(address indexed platform);
-    event StartSeason(uint64 indexed season, address[] gamemodes);
+    event SeasonStarted(uint64 indexed season, address[] gamemodes);
+    event SeasonEnded(uint64 indexed season);
 
     event Referral(address indexed user, address indexed referrer);
     event ReferralRewardSet(uint256 indexed index, uint256 numerator);
@@ -31,7 +33,8 @@ contract PlatformInterface is Ownable {
     // #######################################################################################
 
     address private _platform;
-    uint64 private _season;
+    uint48 private _startCounter;
+    uint48 private _endCounter;
 
     mapping(address => address) private _referredBy;
     mapping(uint256 => uint256) private _referralReward;
@@ -53,8 +56,8 @@ contract PlatformInterface is Ownable {
     // #######################################################################################
 
     /// @notice Returns the next season number.
-    function getNextSeason() external view returns (uint64) {
-        return _season;
+    function getNextSeason() external view returns (uint48) {
+        return _startCounter;
     }
 
     /// @notice Returns the current platform address.
@@ -89,12 +92,38 @@ contract PlatformInterface is Ownable {
     // #######################################################################################
 
     /// @notice Starts a new season.
-    /// @param _gamemodes The list of game contracts tracked in this season.
-    function startSeason(address[] calldata _gamemodes) external onlyOwner {
-        emit StartSeason(_season, _gamemodes);
-        unchecked {
-            _season++;
+    /// @param gamemodes_ The list of gamemodes for the new season.
+    function startSeason(address[] calldata gamemodes_) external onlyOwner {
+        uint48 start = _startCounter;
+        uint48 end = _endCounter;
+
+        if (start != end) {
+            emit SeasonEnded(end);
+
+            unchecked {
+                _endCounter = end + 1;
+            }
         }
+
+        emit SeasonStarted(start, gamemodes_);
+
+        unchecked {
+            _startCounter = start + 1;
+        }
+    }
+
+    /// @notice Ends the current season.
+    function endSeason() external onlyOwner {
+        uint48 end = _endCounter;
+        emit SeasonEnded(end);
+
+        unchecked {
+            end++;
+        }
+
+        if (_startCounter != end) revert NotCurrentSeasonError();
+
+        _endCounter = end;
     }
 
     /// @notice Sets the platform address.

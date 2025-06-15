@@ -118,24 +118,73 @@ describe("PlatformInterface", function () {
                 .withArgs(wallets.b.address);
         });
 
-        it("Should emit StartSeason", async function () {
+        it("Should emit SeasonStarted", async function () {
             const { sut, wallets } = await loadFixture(fixture);
 
-            const nextSeason = await sut.getNextSeason();
+            const season = await sut.getNextSeason();
             const gamemodes = [wallets.a.address, wallets.b.address, wallets.c.address];
 
-            await expect(sut.startSeason(gamemodes)).to.emit(sut, "StartSeason").withArgs(nextSeason, gamemodes);
+            await expect(sut.startSeason(gamemodes)).to.emit(sut, "SeasonStarted").withArgs(season, gamemodes);
         });
 
-        it("Should increment the season", async function () {
+        it("Should emit SeasonEnded if it has not yet ended", async function () {
             const { sut, wallets } = await loadFixture(fixture);
 
-            const nextSeason = await sut.getNextSeason();
+            const season = await sut.getNextSeason();
             const gamemodes = [wallets.a.address, wallets.b.address, wallets.c.address];
 
-            await sut.connect(wallets.deployer).startSeason(gamemodes);
+            await sut.startSeason(gamemodes);
 
-            expect(await sut.getNextSeason()).to.equal(nextSeason + 1n);
+            await expect(sut.startSeason(gamemodes)).to.emit(sut, "SeasonEnded").withArgs(season);
+        });
+
+        it("Should not emit SeasonEnded when it has already ended", async function () {
+            const { sut, wallets } = await loadFixture(fixture);
+
+            const gamemodes = [wallets.a.address, wallets.b.address, wallets.c.address];
+
+            await sut.startSeason(gamemodes);
+            await sut.endSeason();
+
+            await expect(sut.startSeason(gamemodes)).to.not.emit(sut, "SeasonEnded");
+        });
+    });
+
+    describe("endSeason", function () {
+        it("Should revert if the caller is not the owner", async function () {
+            const { sut, wallets } = await loadFixture(fixture);
+
+            await expect(sut.connect(wallets.b).endSeason())
+                .to.be.revertedWithCustomError(sut, "OwnableUnauthorizedAccount")
+                .withArgs(wallets.b.address);
+        });
+
+        it("Should revert if the season has not been started", async function () {
+            const { sut } = await loadFixture(fixture);
+
+            await expect(sut.endSeason())
+                .to.be.revertedWithCustomError(sut, "NotCurrentSeasonError");
+        });
+
+        it("Should revert if the season has already ended", async function () {
+            const { sut, wallets } = await loadFixture(fixture);
+
+            const gamemodes = [wallets.a.address, wallets.b.address, wallets.c.address];
+            await sut.startSeason(gamemodes);
+            await sut.endSeason();
+
+            await expect(sut.endSeason())
+                .to.be.revertedWithCustomError(sut, "NotCurrentSeasonError");
+        });
+
+        it("Should emit SeasonEnded", async function () {
+            const { sut, wallets } = await loadFixture(fixture);
+
+            const season = await sut.getNextSeason();
+            const gamemodes = [wallets.a.address, wallets.b.address, wallets.c.address];
+            await sut.startSeason(gamemodes);
+
+            await expect(sut.endSeason()).to.emit(sut, "SeasonEnded").withArgs(season);
         });
     });
 
