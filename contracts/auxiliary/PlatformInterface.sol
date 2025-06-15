@@ -211,10 +211,10 @@ contract PlatformInterface is Ownable {
 
     function _setupRewards(address _token, uint256 _value) private {
         // Find the number of referrers (depth) for the caller.
-        uint256 depth = _getDepth(msg.sender);
+        uint256 depth = _getDepth();
 
         // Find the referrers and their corresponding numerators.
-        address[] memory referrers = _getReferrers(msg.sender, depth);
+        address[] memory referrers = _getReferrers(depth);
         uint256[] memory numerators = _getNumerators(depth);
 
         // Assign rewards to the referrers.
@@ -235,10 +235,10 @@ contract PlatformInterface is Ownable {
         }
     }
 
-    function _getDepth(address _user) private view returns (uint256) {
+    function _getDepth() private view returns (uint256) {
         uint256 depth = 0;
 
-        address referrer = _referredBy[_user];
+        address referrer = _referredBy[msg.sender];
         // Count how many referrers there are until we reach address(0) or a referrer with no reward.
         while (referrer != address(0) && _referralReward[depth] > 0) {
             referrer = _referredBy[referrer];
@@ -260,10 +260,10 @@ contract PlatformInterface is Ownable {
         return numerators;
     }
 
-    function _getReferrers(address _user, uint256 _depth) private view returns (address[] memory) {
+    function _getReferrers(uint256 _depth) private view returns (address[] memory) {
         address[] memory receivers = new address[](_depth);
 
-        address referrer = _referredBy[_user];
+        address referrer = _referredBy[msg.sender];
         for (uint256 i = 0; i < _depth; i++) {
             receivers[i] = referrer;
             referrer = _referredBy[referrer];
