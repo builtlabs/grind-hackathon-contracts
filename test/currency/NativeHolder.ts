@@ -29,6 +29,28 @@ describe("NativeHolder", function () {
 
     // ############################ TESTS ############################
 
+    describe("setSendGasLimit", function () {
+        it("Should revert if the caller is not the owner", async function () {
+            const { sut } = await loadFixture(fixture);
+
+            const [_, alice] = await ethers.getSigners();
+
+            await expect(sut.connect(alice).setSendGasLimit(2300n)).to.be.revertedWithCustomError(
+                sut,
+                "OwnableUnauthorizedAccount"
+            );
+        });
+
+        it("Should set the minimum", async function () {
+            const { sut } = await loadFixture(fixture);
+
+            const limit = 2300n;
+            await sut.setSendGasLimit(limit);
+
+            expect(await sut.getSendGasLimit()).to.equal(limit);
+        });
+    });
+
     describe("claim", function () {
         async function stagedBalanceFixture() {
             const { sut, nativeReceiving, wallet } = await fixture();
@@ -117,8 +139,10 @@ describe("NativeHolder", function () {
                 const { sut, nativeReceiving } = await loadFixture(stagedBalanceFixture);
 
                 const calldata = sut.interface.encodeFunctionData("claim");
-                await expect(nativeReceiving.call(sut.target, calldata))
-                    .to.be.revertedWithCustomError(sut, "NativeHolderFailedToClaim");
+                await expect(nativeReceiving.call(sut.target, calldata)).to.be.revertedWithCustomError(
+                    sut,
+                    "NativeHolderFailedToClaim"
+                );
             });
         });
     });

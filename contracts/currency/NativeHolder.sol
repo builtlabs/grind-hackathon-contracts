@@ -15,8 +15,23 @@ abstract contract NativeHolder is ValueHolder {
     // #######################################################################################
 
     mapping(address => uint256) private _unclaimedBalances;
+    uint256 private _sendGasLimit = 120000;
 
     // #######################################################################################
+
+    /// @notice Sets the gas limit for sending native currency.
+    /// @param _gasLimit The gas limit to set for sending native currency.
+    /// @dev Setting this to a low number will cause all sends to be staged.
+    function setSendGasLimit(uint256 _gasLimit) external onlyOwner {
+        _sendGasLimit = _gasLimit;
+    }
+
+    // #######################################################################################
+
+    /// @notice Returns the current gas limit for sending native currency.
+    function getSendGasLimit() external view returns (uint256) {
+        return _sendGasLimit;
+    }
 
     /// @notice Returns the unclaimed balance for a given user.
     function getUnclaimedBalance(address _to) external view returns (uint256) {
@@ -59,8 +74,7 @@ abstract contract NativeHolder is ValueHolder {
     }
 
     function _sendValue(address _to, uint256 _value) internal override hasAvailableBalance(_value) {
-        // TODO: Double check this limit.
-        (bool success, ) = _to.call{ value: _value, gas: 80000 }("");
+        (bool success, ) = _to.call{ value: _value, gas: _sendGasLimit }("");
         if (!success) {
             // If the transfer fails, we assume the recipient is a contract that does not accept native currency.
             _stageAmount(_value);
