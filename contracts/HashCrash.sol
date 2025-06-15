@@ -46,7 +46,7 @@ abstract contract HashCrash is Liquidity {
     event BetCancelled(bytes32 indexed roundHash, uint256 indexed index);
 
     event ActiveUpdated(bool active);
-    event LootTableUpdated(ILootTable lootTable);
+    event LootTableUpdated(address lootTable);
 
     // #######################################################################################
 
@@ -83,7 +83,7 @@ abstract contract HashCrash is Liquidity {
     uint64 private _introBlocks;
     uint32 private _reducedIntroBlocks;
 
-    ILootTable private _stagedLootTable;
+    address private _stagedLootTable;
     uint64 private _hashIndex;
     bool private _active;
 
@@ -97,7 +97,7 @@ abstract contract HashCrash is Liquidity {
     /// @param minimumValue_ The minimum value that can be used for bets.
     /// @param owner_ The owner of the contract.
     constructor(
-        ILootTable lootTable_,
+        address lootTable_,
         bytes32 genesisHash_,
         address hashProducer_,
         uint128 lowLiquidityThreshold_,
@@ -131,7 +131,7 @@ abstract contract HashCrash is Liquidity {
     }
 
     /// @notice Returns the staged loot table, if any. It will be applied when the next round starts.
-    function getStagedLootTable() external view returns (ILootTable) {
+    function getStagedLootTable() external view returns (address) {
         return _stagedLootTable;
     }
 
@@ -152,26 +152,40 @@ abstract contract HashCrash is Liquidity {
 
     /// @notice Returns all bets placed in the current round by the given user.
     function getBetsFor(address _user) external view returns (BetOutput[] memory) {
+        uint256 length = _betsLength;
         uint256 count = 0;
 
-        for (uint256 i = 0; i < _betsLength; i++) {
+        for (uint256 i = 0; i < length; ) {
             if (_bets[i].user == _user) {
                 count++;
+            }
+
+            unchecked {
+                i++;
             }
         }
 
         BetOutput[] memory userBets = new BetOutput[](count);
+        uint256 bitmap = _betCancelledBitmap;
 
         count = 0;
-        for (uint256 i = 0; i < _betsLength; i++) {
-            if (_bets[i].user == _user) {
+        for (uint256 i = 0; i < length; ) {
+            Bet memory b = _bets[i];
+            if (b.user == _user) {
                 userBets[count] = BetOutput({
-                    amount: _bets[i].amount,
-                    user: _bets[i].user,
-                    cashoutIndex: _bets[i].cashoutIndex,
-                    cancelled: _getCancelled(i, _betCancelledBitmap)
+                    amount: b.amount,
+                    user: b.user,
+                    cashoutIndex: b.cashoutIndex,
+                    cancelled: _getCancelled(i, bitmap)
                 });
-                count++;
+
+                unchecked {
+                    count++;
+                }
+            }
+
+            unchecked {
+                i++;
             }
         }
 
@@ -201,14 +215,21 @@ abstract contract HashCrash is Liquidity {
         startBlock_ = _roundStartBlock;
         roundLiquidity_ = _getRoundLiquidity();
         hash_ = _roundHash;
+
+        uint256 bitmap = _betCancelledBitmap;
         bets_ = new BetOutput[](_betsLength);
-        for (uint256 i = 0; i < _betsLength; i++) {
+        for (uint256 i = 0; i < bets_.length; ) {
+            Bet memory b = _bets[i];
             bets_[i] = BetOutput({
-                amount: _bets[i].amount,
-                user: _bets[i].user,
-                cashoutIndex: _bets[i].cashoutIndex,
-                cancelled: _getCancelled(i, _betCancelledBitmap)
+                amount: b.amount,
+                user: b.user,
+                cashoutIndex: b.cashoutIndex,
+                cancelled: _getCancelled(i, bitmap)
             });
+
+            unchecked {
+                i++;
+            }
         }
 
         if (_isIdle() || startBlock_ >= block.number) {
@@ -223,8 +244,12 @@ abstract contract HashCrash is Liquidity {
 
             blockHashes_ = new bytes32[](length);
 
-            for (uint64 i = 0; i < length; i++) {
+            for (uint64 i = 0; i < length; ) {
                 blockHashes_[i] = blockhash(startBlock_ + i);
+
+                unchecked {
+                    i++;
+                }
             }
         }
     }
@@ -270,7 +295,7 @@ abstract contract HashCrash is Liquidity {
     /// @notice Sets the loot table for the game.
     /// @param lootTable_ The new loot table to use.
     /// @dev If the game is currently idle, the loot table is set immediately. Otherwise, it is staged for the next round.
-    function setLootTable(ILootTable lootTable_) external onlyOwner {
+    function setLootTable(address lootTable_) external onlyOwner {
         if (_isIdle()) {
             _setLootTable(lootTable_);
         } else {
@@ -289,8 +314,10 @@ abstract contract HashCrash is Liquidity {
             _initialiseRound();
         }
 
+        uint256 length = _betsLength;
+
         // Ensure the bet is valid
-        if (_betsLength == _MAX_BET_QUEUE_SIZE) revert RoundFullError();
+        if (length == _MAX_BET_QUEUE_SIZE) revert RoundFullError();
         if (_roundStartBlock <= block.number) revert RoundInProgressError();
         if (_lootTable.getLength() <= _autoCashout) revert InvalidCashoutIndexError();
 
@@ -301,12 +328,12 @@ abstract contract HashCrash is Liquidity {
         _useRoundLiquidity(_lootTable.multiply(_amount, _autoCashout));
 
         // Emit an event for the bet placed
-        emit BetPlaced(_roundHash, _betsLength, msg.sender, _amount, _autoCashout);
+        emit BetPlaced(_roundHash, length, msg.sender, _amount, _autoCashout);
 
         // Store the bet
-        _bets[_betsLength] = Bet(_amount, msg.sender, _autoCashout);
+        _bets[length] = Bet(_amount, msg.sender, _autoCashout);
         unchecked {
-            _betsLength++;
+            _betsLength = length + 1;
         }
     }
 
@@ -321,8 +348,9 @@ abstract contract HashCrash is Liquidity {
         if (_lootTable.getLength() <= _autoCashout) revert InvalidCashoutIndexError();
 
         // Update the round liquidity
-        _releaseRoundLiquidity(_lootTable.multiply(bet.amount, bet.cashoutIndex));
-        _useRoundLiquidity(_lootTable.multiply(bet.amount, _autoCashout));
+        uint256 amount = bet.amount;
+        _releaseRoundLiquidity(_lootTable.multiply(amount, bet.cashoutIndex));
+        _useRoundLiquidity(_lootTable.multiply(amount, _autoCashout));
 
         // Update the bet
         bet.cashoutIndex = _autoCashout;
@@ -455,8 +483,9 @@ abstract contract HashCrash is Liquidity {
         if (!_active) revert NotActiveError();
 
         // Apply the staged loot table if it exists
-        if (_stagedLootTable != ILootTable(address(0))) {
-            _setLootTable(_stagedLootTable);
+        address staged = _stagedLootTable;
+        if (staged != address(0)) {
+            _setLootTable(staged);
             delete _stagedLootTable;
         }
 
@@ -464,39 +493,49 @@ abstract contract HashCrash is Liquidity {
         emit RoundStarted(_roundHash, _roundStartBlock, _hashIndex);
     }
 
-    function _setLootTable(ILootTable lootTable_) private {
-        _lootTable = lootTable_;
+    function _setLootTable(address lootTable_) private {
+        _lootTable = ILootTable(lootTable_);
         emit LootTableUpdated(lootTable_);
     }
 
     function _processBets(uint64 _deadIndex) private {
-        uint256 _bitmap = _betCancelledBitmap;
+        uint256 bitmap = _betCancelledBitmap;
+        _betCancelledBitmap = 0;
 
-        for (uint256 i = 0; i < _betsLength; i++) {
-            if (!_getCancelled(i, _bitmap)) {
+        uint256 length = _betsLength;
+        _betsLength = 0;
+
+        for (uint256 i = 0; i < length; ) {
+            if (!_getCancelled(i, bitmap)) {
                 Bet memory bet = _bets[i];
 
                 if (bet.cashoutIndex < _deadIndex) {
                     _sendValue(bet.user, _lootTable.multiply(bet.amount, bet.cashoutIndex));
                 }
             }
-        }
 
-        _betsLength = 0;
-        _betCancelledBitmap = 0;
+            unchecked {
+                i++;
+            }
+        }
     }
 
     function _refundBets() private {
-        uint256 _bitmap = _betCancelledBitmap;
+        uint256 bitmap = _betCancelledBitmap;
+        _betCancelledBitmap = 0;
 
-        for (uint256 i = 0; i < _betsLength; i++) {
-            if (!_getCancelled(i, _bitmap)) {
+        uint256 length = _betsLength;
+        _betsLength = 0;
+
+        for (uint256 i = 0; i < length; ) {
+            if (!_getCancelled(i, bitmap)) {
                 _sendValue(_bets[i].user, _bets[i].amount);
                 emit BetCancelled(_roundHash, i);
             }
-        }
 
-        _betsLength = 0;
-        _betCancelledBitmap = 0;
+            unchecked {
+                i++;
+            }
+        }
     }
 }

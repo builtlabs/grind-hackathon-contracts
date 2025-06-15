@@ -9,6 +9,12 @@ const ABSSCAN_API_KEY = vars.get("ABSSCAN_API_KEY");
 const config: HardhatUserConfig = {
     solidity: {
         version: "0.8.24",
+        settings: {
+            optimizer: {
+                enabled: true,
+                runs: 200,
+            },
+        },
     },
     zksolc: {
         version: "1.5.12",
@@ -16,6 +22,10 @@ const config: HardhatUserConfig = {
         settings: {
             enableEraVMExtensions: true,
             codegen: "yul",
+            optimizer: {
+                enabled: true,
+                runs: 200,
+            },
         },
     },
     defaultNetwork: "hardhat",

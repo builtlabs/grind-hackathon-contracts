@@ -122,8 +122,12 @@ abstract contract Liquidity is ValueHolder {
     function getLiquidityQueue() external view returns (LiquidityDelta[] memory) {
         LiquidityDelta[] memory queue = new LiquidityDelta[](_liquidityQueueLength);
 
-        for (uint256 i = 0; i < _liquidityQueueLength; i++) {
+        for (uint256 i = 0; i < queue.length; ) {
             queue[i] = _liquidityQueue[i];
+
+            unchecked {
+                i++;
+            }
         }
 
         return queue;
@@ -174,36 +178,43 @@ abstract contract Liquidity is ValueHolder {
 
     function _clearLiquidityQueue() internal {
         // Cache the available balance to avoid multiple calls to _getAvailableBalance.
-        uint256 _balance = _getAvailableBalance();
+        uint256 balance = _getAvailableBalance();
+        uint256 length = _liquidityQueueLength;
+        _liquidityQueueLength = 0;
 
-        for (uint256 i = 0; i < _liquidityQueueLength; i++) {
+        for (uint256 i = 0; i < length; ) {
             LiquidityDelta memory delta = _liquidityQueue[i];
 
             if (delta.action == 0) {
-                _addLiquidity(delta.user, delta.amount, _balance);
+                _addLiquidity(delta.user, delta.amount, balance);
                 unchecked {
-                    _balance += delta.amount;
+                    balance += delta.amount;
                 }
             } else {
-                _balance -= _removeLiquidity(delta.user, delta.amount, _balance);
+                balance -= _removeLiquidity(delta.user, delta.amount, balance);
+            }
+
+            unchecked {
+                i++;
             }
         }
-
-        _liquidityQueueLength = 0;
 
         _resetLiquidity();
     }
 
     function _useRoundLiquidity(uint256 _amount) internal {
-        if (_amount > _availableLiquidity) {
+        uint256 availableLiquidity = _availableLiquidity;
+        if (_amount > availableLiquidity) {
             revert InsufficientLiquidity();
         }
 
         unchecked {
-            _availableLiquidity -= _amount;
+            availableLiquidity -= _amount;
         }
 
-        if (_availableLiquidity < _lowLiquidityThreshold) {
+        _availableLiquidity = availableLiquidity;
+
+        if (availableLiquidity < _lowLiquidityThreshold) {
             _onLowLiquidity();
         }
     }
@@ -228,11 +239,12 @@ abstract contract Liquidity is ValueHolder {
     // #######################################################################################
 
     function _queueLiquidityChange(uint8 _action, uint256 _amount) private {
-        if (_liquidityQueueLength == _MAX_LIQUIDITY_QUEUE_SIZE) revert LiquidityQueueFull();
+        uint256 length = _liquidityQueueLength;
+        if (length == _MAX_LIQUIDITY_QUEUE_SIZE) revert LiquidityQueueFull();
 
-        _liquidityQueue[_liquidityQueueLength] = LiquidityDelta(_action, msg.sender, _amount);
+        _liquidityQueue[length] = LiquidityDelta(_action, msg.sender, _amount);
         unchecked {
-            _liquidityQueueLength++;
+            _liquidityQueueLength = length + 1;
         }
 
         emit LiquidityChangeQueued(_action, msg.sender, _amount);

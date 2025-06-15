@@ -2,12 +2,11 @@
 pragma solidity ^0.8.24;
 
 import { HashCrash } from "../HashCrash.sol";
-import { ILootTable } from "../interfaces/ILootTable.sol";
 import { ERC20Holder } from "../currency/ERC20Holder.sol";
 
 contract HashCrashHarness is HashCrash, ERC20Holder {
     constructor(
-        ILootTable lootTable_,
+        address lootTable_,
         bytes32 genesisHash_,
         address hashProducer_,
         uint128 lowLiquidityThreshold_,
