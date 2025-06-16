@@ -243,6 +243,7 @@ abstract contract HashCrash is Liquidity {
     /// @return hashIndex_ The index of the current round hash.
     /// @return startBlock_ The block number when the current round started.
     /// @return lootTable_ The loot table used for the current round.
+    /// @return minimum_ The minimum value to either bet or manage liquidity.
     /// @return roundLiquidity_ The total liquidity available for the current round.
     /// @return hash_ The current round hash.
     /// @return bets_ An array of all bets placed in the current round.
@@ -255,6 +256,7 @@ abstract contract HashCrash is Liquidity {
             uint64 hashIndex_,
             uint64 startBlock_,
             ILootTable lootTable_,
+            uint256 minimum_,
             uint256 roundLiquidity_,
             bytes32 hash_,
             BetOutput[] memory bets_,
@@ -265,6 +267,7 @@ abstract contract HashCrash is Liquidity {
         hashIndex_ = _hashIndex;
         startBlock_ = _roundStartBlock;
         lootTable_ = _lootTable;
+        minimum_ = _getMinimum();
         roundLiquidity_ = _getRoundLiquidity();
         hash_ = _roundHash;
         bets_ = _getBets();

@@ -623,6 +623,16 @@ describe("HashCrash", function () {
                 const roundInfo = await sut.getRoundInfo();
                 expect(roundInfo.lootTable_).to.equal(lootTable.target);
             });
+        });        
+        
+        describe("minimum_", function () {
+            it("Should return minimum", async function () {
+                const { sut } = await loadFixture(baseFixture);
+
+                const minimum = await sut.getMinimum();
+                const roundInfo = await sut.getRoundInfo();
+                expect(roundInfo.minimum_).to.equal(minimum);
+            });
         });
 
         describe("roundLiquidity_", function () {
