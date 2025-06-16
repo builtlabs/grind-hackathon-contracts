@@ -111,30 +111,6 @@ describe("Liquidity", function () {
             await expect(sut.deposit(minimumValue - 1n)).to.be.revertedWithCustomError(sut, "ValueHolderValueTooSmall");
         });
 
-        it("Should revert if another change has already been made", async function () {
-            const { sut, token, wallets } = await loadFixture(fixture);
-
-            await token.mint(wallets.deployer.address, oneEther * 2n);
-            await token.approve(sut.target, oneEther * 2n);
-
-            await sut.deposit(oneEther);
-
-            await expect(sut.deposit(oneEther)).to.be.revertedWithCustomError(sut, "OneChangePerRound");
-        });
-
-        it("Should update lastUpdated", async function () {
-            const { sut, token, wallets } = await loadFixture(fixture);
-
-            await token.mint(wallets.deployer.address, oneEther);
-            await token.approve(sut.target, oneEther);
-
-            const round = 2n;
-            await sut.mockRound(round);
-
-            await sut.deposit(oneEther);
-            expect(await sut.getLastUpdated(wallets.deployer)).to.equal(round);
-        });
-
         it("Should receive the token value", async function () {
             const { sut, token, wallets } = await loadFixture(fixture);
 
@@ -179,11 +155,25 @@ describe("Liquidity", function () {
                 await sut.mockCanChangeLiquidity(true);
 
                 await sut.deposit(oneEther / 4n);
-                await sut.mockRound(2n);
                 await sut.deposit((oneEther / 4n) * 3n);
 
                 expect(await sut.getShares(wallets.deployer.address)).to.equal(oneEther);
                 expect(await sut.getTotalShares()).to.equal(oneEther);
+            });
+
+            it("Should not update lastUpdated", async function () {
+                const { sut, token, wallets } = await loadFixture(fixture);
+
+                await token.mint(wallets.deployer.address, oneEther);
+                await token.approve(sut.target, oneEther);
+
+                await sut.mockCanChangeLiquidity(true);
+
+                const round = 2n;
+                await sut.mockRound(round);
+
+                await sut.deposit(oneEther);
+                expect(await sut.getLastUpdated(wallets.deployer)).to.equal(0n);
             });
 
             it("Should emit LiquidityAdded", async function () {
@@ -234,6 +224,34 @@ describe("Liquidity", function () {
                 await token.mint(wallets.deployer.address, amount);
                 await token.approve(sut.target, amount);
                 await expect(sut.deposit(amount)).to.be.revertedWithCustomError(sut, "LiquidityQueueFull");
+            });
+
+            it("Should revert if another change has already been made", async function () {
+                const { sut, token, wallets } = await loadFixture(fixture);
+
+                await token.mint(wallets.deployer.address, oneEther * 2n);
+                await token.approve(sut.target, oneEther * 2n);
+
+                await sut.mockCanChangeLiquidity(false);
+
+                await sut.deposit(oneEther);
+
+                await expect(sut.deposit(oneEther)).to.be.revertedWithCustomError(sut, "OneChangePerRound");
+            });
+
+            it("Should update lastUpdated", async function () {
+                const { sut, token, wallets } = await loadFixture(fixture);
+
+                await token.mint(wallets.deployer.address, oneEther);
+                await token.approve(sut.target, oneEther);
+
+                await sut.mockCanChangeLiquidity(false);
+
+                const round = 2n;
+                await sut.mockRound(round);
+
+                await sut.deposit(oneEther);
+                expect(await sut.getLastUpdated(wallets.deployer)).to.equal(round);
             });
 
             it("Should push the deposit into the liquidity queue", async function () {
@@ -288,34 +306,6 @@ describe("Liquidity", function () {
             await expect(sut.withdraw(0)).to.be.revertedWithCustomError(sut, "ValueHolderValueTooSmall");
         });
 
-        it("Should revert if another change has already been made", async function () {
-            const { sut, token, wallets } = await loadFixture(fixture);
-
-            await token.mint(wallets.deployer.address, oneEther);
-            await token.approve(sut.target, oneEther);
-
-            await sut.deposit(oneEther);
-
-            await expect(sut.withdraw(oneEther)).to.be.revertedWithCustomError(sut, "OneChangePerRound");
-        });
-
-        it("Should update lastUpdated", async function () {
-            const { sut, token, wallets } = await loadFixture(fixture);
-
-            await sut.mockCanChangeLiquidity(true);
-
-            await token.mint(wallets.deployer.address, oneEther);
-            await token.approve(sut.target, oneEther);
-            await sut.deposit(oneEther);
-
-            const round = 2n;
-            await sut.mockRound(round);
-
-            await sut.withdraw(oneEther);
-
-            expect(await sut.getLastUpdated(wallets.deployer)).to.equal(round);
-        });
-
         describe("_canChangeLiquidity() == true", function () {
             it("Should revert if the user does not have enough shares", async function () {
                 const { sut } = await loadFixture(fixture);
@@ -339,6 +329,23 @@ describe("Liquidity", function () {
 
                 expect(await sut.getShares(wallets.deployer.address)).to.equal(0);
                 expect(await sut.getTotalShares()).to.equal(0);
+            });
+
+            it("Should not update lastUpdated", async function () {
+                const { sut, token, wallets } = await loadFixture(fixture);
+
+                await sut.mockCanChangeLiquidity(true);
+
+                await token.mint(wallets.deployer.address, oneEther);
+                await token.approve(sut.target, oneEther);
+                await sut.deposit(oneEther);
+
+                const round = 2n;
+                await sut.mockRound(round);
+
+                await sut.withdraw(oneEther);
+
+                expect(await sut.getLastUpdated(wallets.deployer)).to.equal(0n);
             });
 
             it("Should set accurate shares for a partial withdraw", async function () {
@@ -430,6 +437,42 @@ describe("Liquidity", function () {
                 await sut.mockCanChangeLiquidity(false);
 
                 await expect(sut.withdraw(oneEther)).to.be.revertedWithCustomError(sut, "InsufficientShares");
+            });
+
+            it("Should revert if another change has already been made", async function () {
+                const { sut, token, wallets } = await loadFixture(fixture);
+
+                await token.mint(wallets.deployer.address, oneEther);
+                await token.approve(sut.target, oneEther);
+
+                await sut.mockCanChangeLiquidity(true);
+
+                await sut.deposit(oneEther);
+
+                await sut.mockCanChangeLiquidity(false);
+
+                await sut.withdraw(oneEther);
+
+                await expect(sut.withdraw(oneEther)).to.be.revertedWithCustomError(sut, "OneChangePerRound");
+            });
+
+            it("Should update lastUpdated", async function () {
+                const { sut, token, wallets } = await loadFixture(fixture);
+
+                await sut.mockCanChangeLiquidity(true);
+
+                await token.mint(wallets.deployer.address, oneEther);
+                await token.approve(sut.target, oneEther);
+                await sut.deposit(oneEther);
+
+                await sut.mockCanChangeLiquidity(false);
+
+                const round = 2n;
+                await sut.mockRound(round);
+
+                await sut.withdraw(oneEther);
+
+                expect(await sut.getLastUpdated(wallets.deployer)).to.equal(round);
             });
 
             it("Should push the withdraw into the liquidity queue when the user has deposited", async function () {

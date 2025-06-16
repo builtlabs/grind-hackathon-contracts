@@ -46,20 +46,6 @@ abstract contract Liquidity is ValueHolder {
 
     // #######################################################################################
 
-    modifier onlyChange() {
-        uint64 round = _getRound();
-
-        // Ensure that the user has not already made a change in this round.
-        if (_users[msg.sender].lastUpdated == round) revert OneChangePerRound();
-
-        // Update their last changed.
-        _users[msg.sender].lastUpdated = round;
-
-        _;
-    }
-
-    // #######################################################################################
-
     /// @notice Constructor sets the initial max liquidity exposure to 10% and the low liquidity threshold.
     /// @param lowLiquidityThreshold_ The threshold below which the parent is notified the _availableLiquidity is low.
     /// @param minimumValue_ The minimum value that can be used for deposits.
@@ -137,7 +123,7 @@ abstract contract Liquidity is ValueHolder {
 
     /// @notice Either deposits, or queues a deposit of the given amount by the sender.
     /// @param _amount The amount to deposit, must be greater than zero.
-    function deposit(uint256 _amount) external payable enforceMinimum(_amount) onlyChange {
+    function deposit(uint256 _amount) external payable enforceMinimum(_amount) {
         // Standardize behavior between native and ERC20 deposits.
         _receiveValue(msg.sender, _amount);
 
@@ -156,7 +142,7 @@ abstract contract Liquidity is ValueHolder {
 
     /// @notice Either withdraws, or queues a withdrawal of the given amount by the sender.
     /// @param _amount The amount to withdraw, must be greater than zero.
-    function withdraw(uint256 _amount) external notZero(_amount) onlyChange {
+    function withdraw(uint256 _amount) external notZero(_amount) {
         // Ensure the user has enough shares to withdraw.
         if (_users[msg.sender].shares < _amount) revert InsufficientShares();
 
@@ -239,6 +225,10 @@ abstract contract Liquidity is ValueHolder {
     // #######################################################################################
 
     function _queueLiquidityChange(uint8 _action, uint256 _amount) private {
+        uint64 round = _getRound();
+        if (_users[msg.sender].lastUpdated == round) revert OneChangePerRound();
+        _users[msg.sender].lastUpdated = round;
+
         uint256 length = _liquidityQueueLength;
         if (length == _MAX_LIQUIDITY_QUEUE_SIZE) revert LiquidityQueueFull();
 
