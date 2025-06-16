@@ -623,8 +623,8 @@ describe("HashCrash", function () {
                 const roundInfo = await sut.getRoundInfo();
                 expect(roundInfo.lootTable_).to.equal(lootTable.target);
             });
-        });        
-        
+        });
+
         describe("minimum_", function () {
             it("Should return minimum", async function () {
                 const { sut } = await loadFixture(baseFixture);
@@ -1609,6 +1609,19 @@ describe("HashCrash", function () {
             const { sut } = await loadFixture(completedBetFixture);
 
             await expect(sut.emergencyRefund()).to.be.revertedWithCustomError(sut, "RoundNotRefundableError");
+        });
+
+        it("Should not be callable until 256 blocks have passed the round start block", async function () {
+            const { sut, config } = await loadFixture(liquidFixture);
+
+            await expect(sut.emergencyRefund()).to.be.revertedWithCustomError(sut, "RoundNotRefundableError");
+            await sut.placeBet(minimumValue, 10);
+
+            for (let i = 0; i < config.introBlocks + 256; i++) {
+                await expect(sut.emergencyRefund()).to.be.revertedWithCustomError(sut, "RoundNotRefundableError");
+            }
+
+            await expect(sut.emergencyRefund()).to.not.be.reverted;
         });
 
         it("Should be callable by anyone", async function () {
