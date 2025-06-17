@@ -5,20 +5,20 @@ import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
 import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import { SafeERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
+import { WrappedContext } from "../currency/WrappedContext.sol";
+
 /// @title PlatformInterface
 /// @author BuiltByFrancis
 /// @notice A generic contract used for fee collection, referral, and reward distribution.
-contract PlatformInterface is Ownable {
+contract PlatformInterface is WrappedContext, Ownable {
     uint256 private constant DENOMINATOR = 10000;
-    address private constant NATIVE = address(0);
 
     // #######################################################################################
 
     error InvalidValueError();
-    error ReservedIndexError();
+    error InvalidAddressError();
     error AlreadyReferredError();
     error NotCurrentSeasonError();
-    error FailedToSendNativeError();
 
     event PlatformSet(address indexed platform);
     event SeasonStarted(uint64 indexed season, address[] gamemodes);
@@ -46,7 +46,7 @@ contract PlatformInterface is Ownable {
     /// @notice Constructor.
     /// @param platform_ The platform wallet for fee collection.
     /// @param owner_ The initial owner of the contract.
-    constructor(address platform_, address owner_) Ownable(owner_) {
+    constructor(address platform_, address weth_, address owner_) WrappedContext(weth_) Ownable(owner_) {
         _setPlatform(platform_);
 
         _setReferralReward(0, 1500); // 15%
@@ -90,6 +90,8 @@ contract PlatformInterface is Ownable {
     }
 
     // #######################################################################################
+
+    // TODO: Double check these tests
 
     /// @notice Starts a new season.
     /// @param gamemodes_ The list of gamemodes for the new season.
@@ -148,7 +150,7 @@ contract PlatformInterface is Ownable {
     /// @param _referrer The address of the referrer.
     /// @dev This function can only be called once per user. If the user already has a referrer, it will revert.
     function setReferredBy(address _referrer) external {
-        if (_referrer == address(0) || _referrer == msg.sender || _isCyclical(_referrer)) revert InvalidValueError();
+        if (_referrer == address(0) || _referrer == msg.sender || _isCyclical(_referrer)) revert InvalidAddressError();
         if (_referredBy[msg.sender] != address(0)) revert AlreadyReferredError();
 
         _referredBy[msg.sender] = _referrer;
@@ -165,12 +167,7 @@ contract PlatformInterface is Ownable {
             if (reward > 0) {
                 _tokenUserRewards[token][msg.sender] = 0;
 
-                if (token == NATIVE) {
-                    (bool success, ) = payable(msg.sender).call{ value: reward }("");
-                    if (!success) revert FailedToSendNativeError();
-                } else {
-                    SafeERC20.safeTransfer(IERC20(token), msg.sender, reward);
-                }
+                SafeERC20.safeTransfer(IERC20(token), msg.sender, reward);
 
                 emit RewardClaimed(msg.sender, token, reward);
             }
@@ -182,19 +179,21 @@ contract PlatformInterface is Ownable {
     /// @notice Receives tokens from the caller and sets up the rewards.
     /// @param _token The address of the token to receive.
     /// @param _value The amount of tokens to receive. Must be non-zero.
-    function receiveToken(address _token, uint256 _value) external {
-        if (_value == 0) revert InvalidValueError();
+    /// @dev If the token is WETH, it will convert the native currency to WETH.
+    function receiveFee(address _token, uint256 _value) external payable {
+        uint256 _total = msg.value + _value;
+        if (_total == 0) revert InvalidValueError();
 
-        SafeERC20.safeTransferFrom(IERC20(_token), msg.sender, address(this), _value);
-        _setupRewards(_token, _value);
-    }
+        if (msg.value > 0) {
+            if (_token != _getWETH()) revert InvalidAddressError();
+            _nativeToWrapped();
+        }
 
-    /// @notice Receives native currency from the caller and sets up rewards.
-    /// @dev This function can only be called with a non-zero value.
-    receive() external payable {
-        if (msg.value == 0) revert InvalidValueError();
+        if (_value > 0) {
+            SafeERC20.safeTransferFrom(IERC20(_token), msg.sender, address(this), _value);
+        }
 
-        _setupRewards(NATIVE, msg.value);
+        _setupRewards(_token, _total);
     }
 
     // #######################################################################################
