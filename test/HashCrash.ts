@@ -3,6 +3,7 @@ import { expect } from "chai";
 import { ethers } from "hardhat";
 import { id } from "ethers";
 
+const maxExposureNumerator = 1000n;
 const lowLiquidityThreshold = ethers.parseEther("0.1");
 const minimumValue = ethers.parseEther("0.001");
 const initialBalance = ethers.parseEther("1000");
@@ -33,10 +34,11 @@ describe("HashCrash", function () {
             lootTable.target,
             getHash(genesisSalt),
             deployer.address,
+            maxExposureNumerator,
             lowLiquidityThreshold,
-            minimumValue,
             deployer.address,
-            token.target
+            token.target,
+            minimumValue
         );
         await sut.waitForDeployment();
 
@@ -260,10 +262,11 @@ describe("HashCrash", function () {
                 lootTable.target,
                 config.genesisHash,
                 config.hashProducer,
+                maxExposureNumerator,
                 lowLiquidityThreshold,
-                minimumValue,
                 config.owner,
-                token.target
+                token.target,
+                minimumValue
             );
             const receipt = (await tx.deploymentTransaction()!.wait())!;
 
@@ -933,7 +936,7 @@ describe("HashCrash", function () {
 
             await expect(sut.placeBet(minimumValue - 1n, 10)).to.be.revertedWithCustomError(
                 sut,
-                "ValueHolderValueTooSmall"
+                "ValueBelowMinimum"
             );
         });
 

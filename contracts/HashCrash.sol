@@ -93,17 +93,17 @@ abstract contract HashCrash is Liquidity {
     /// @param lootTable_ The loot table to use for the game.
     /// @param genesisHash_ The initial hash for the round.
     /// @param hashProducer_ The address that can produce the next round hash.
+    /// @param maxExposureNumerator_ The numerator for the maximum exposure, must be between 100 and 5000 (1% to 50%).
     /// @param lowLiquidityThreshold_ The round liquidity below which we should start the round early.
-    /// @param minimumValue_ The minimum value that can be used for bets.
     /// @param owner_ The owner of the contract.
     constructor(
         address lootTable_,
         bytes32 genesisHash_,
         address hashProducer_,
+        uint128 maxExposureNumerator_,
         uint128 lowLiquidityThreshold_,
-        uint256 minimumValue_,
         address owner_
-    ) Liquidity(lowLiquidityThreshold_, minimumValue_) Ownable(owner_) {
+    ) Liquidity(maxExposureNumerator_, lowLiquidityThreshold_) Ownable(owner_) {
         _introBlocks = 20;
         _reducedIntroBlocks = 5;
         _cancelReturnNumerator = 9700; // 97%
@@ -268,7 +268,7 @@ abstract contract HashCrash is Liquidity {
         startBlock_ = _roundStartBlock;
         lootTable_ = _lootTable;
         minimum_ = _getMinimum();
-        roundLiquidity_ = _getRoundLiquidity();
+        roundLiquidity_ = _getAvailableLiquidity();
         hash_ = _roundHash;
         bets_ = _getBets();
         blockHashes_ = _getBlockHashes(startBlock_);
@@ -326,10 +326,10 @@ abstract contract HashCrash is Liquidity {
     // ########################################################################################
 
     /// @notice Places a bet in the current round.
-    /// @param _amount The amount to bet, must be greater than zero.
+    /// @param _amount The token amount to bet.
     /// @param _autoCashout The index of the auto cashout in the loot table.
     /// @dev If the round has not started, it will initialise the round.
-    function placeBet(uint256 _amount, uint64 _autoCashout) external payable enforceMinimum(_amount) {
+    function placeBet(uint256 _amount, uint64 _autoCashout) external payable {
         if (_roundStartBlock == 0) {
             _initialiseRound();
         }
@@ -341,8 +341,11 @@ abstract contract HashCrash is Liquidity {
         if (_roundStartBlock <= block.number) revert RoundInProgressError();
         if (_lootTable.getLength() <= _autoCashout) revert InvalidCashoutIndexError();
 
-        // Ensure the user has enough funds
-        _receiveValue(msg.sender, _amount);
+        // Wrap any native ether, standardize behavior between weth and other erc20's.
+        _amount = _receiveValue(msg.sender, _amount);
+
+        // Ensure the amount is at least the minimum required.
+        _ensureMinimum(_amount);
 
         // Reduce the round liquidity by the users max win
         _useRoundLiquidity(_lootTable.multiply(_amount, _autoCashout));

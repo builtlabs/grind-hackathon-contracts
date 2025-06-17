@@ -2,20 +2,21 @@
 pragma solidity ^0.8.24;
 
 import { HashCrash } from "../HashCrash.sol";
-import { ERC20Holder } from "../currency/ERC20Holder.sol";
+import { TokenHolder } from "../currency/TokenHolder.sol";
 
-contract HashCrashHarness is HashCrash, ERC20Holder {
+contract HashCrashHarness is HashCrash {
     constructor(
         address lootTable_,
         bytes32 genesisHash_,
         address hashProducer_,
+        uint128 maxExposureNumerator_,
         uint128 lowLiquidityThreshold_,
-        uint256 minimumValue_,
         address owner_,
-        address token_
+        address token_,
+        uint256 minimumValue_
     )
-        HashCrash(lootTable_, genesisHash_, hashProducer_, lowLiquidityThreshold_, minimumValue_, owner_)
-        ERC20Holder(token_)
+        HashCrash(lootTable_, genesisHash_, hashProducer_, maxExposureNumerator_, lowLiquidityThreshold_, owner_)
+        TokenHolder(token_, minimumValue_)
     {}
 
     function betOnAll(uint256 _amount, uint256 _length) external {
