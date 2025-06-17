@@ -45,9 +45,9 @@ describe("GeneralPaymaster", function () {
 
         const bootloader = await ethers.getSigner("0x0000000000000000000000000000000000008001");
 
-        const BLOCKING = await ethers.getContractFactory("NativeBlocking");
-        const blocking = await BLOCKING.deploy();
-        await blocking.waitForDeployment();
+        const CONTRACT = await ethers.getContractFactory("ExternalContract");
+        const contract = await CONTRACT.deploy();
+        await contract.waitForDeployment();
 
         const SUT = await ethers.getContractFactory("GeneralPaymaster");
         const sut = await SUT.deploy(deployer.address);
@@ -65,7 +65,7 @@ describe("GeneralPaymaster", function () {
 
         return {
             sut,
-            blocking,
+            contract,
             wallets: {
                 deployer,
                 bootloader,
@@ -116,13 +116,13 @@ describe("GeneralPaymaster", function () {
         });
 
         it("Should revert if the withdrawal fails", async function () {
-            const { sut, blocking } = await loadFixture(fixture);
+            const { sut, contract } = await loadFixture(fixture);
 
-            await sut.transferOwnership(blocking.target);
+            await sut.transferOwnership(contract.target);
+            await contract.toggleBlocked();
 
             const calldata = sut.interface.encodeFunctionData("withdraw", [oneEther]);
-
-            await expect(blocking.call(sut.target, calldata)).to.be.revertedWithCustomError(
+            await expect(contract.call(sut.target, calldata)).to.be.revertedWithCustomError(
                 sut,
                 "FailedToTransferEther"
             );
@@ -160,13 +160,13 @@ describe("GeneralPaymaster", function () {
         });
 
         it("Should revert if the withdrawal fails", async function () {
-            const { sut, blocking } = await loadFixture(fixture);
+            const { sut, contract } = await loadFixture(fixture);
 
-            await sut.transferOwnership(blocking.target);
+            await sut.transferOwnership(contract.target);
+            await contract.toggleBlocked();
 
             const calldata = sut.interface.encodeFunctionData("withdrawAll");
-
-            await expect(blocking.call(sut.target, calldata)).to.be.revertedWithCustomError(
+            await expect(contract.call(sut.target, calldata)).to.be.revertedWithCustomError(
                 sut,
                 "FailedToTransferEther"
             );
