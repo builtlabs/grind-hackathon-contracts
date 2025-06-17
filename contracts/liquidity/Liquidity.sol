@@ -141,7 +141,7 @@ abstract contract Liquidity is TokenHolder {
 
     /// @notice Either withdraws, or queues a withdrawal of the given amount by the sender.
     /// @param _amount The amount to withdraw, must be greater than zero.
-    function withdraw(uint256 _amount) external notZero(_amount) {
+    function withdraw(uint256 _amount) external enforceMinimum(_amount) {
         // Ensure the user has enough shares to withdraw.
         if (_users[msg.sender].shares < _amount) revert InsufficientShares();
 

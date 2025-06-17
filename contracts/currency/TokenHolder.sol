@@ -26,11 +26,6 @@ abstract contract TokenHolder is Ownable {
 
     // #######################################################################################
 
-    modifier notZero(uint256 _value) {
-        if (_value == 0) revert ValueBelowMinimum();
-        _;
-    }
-
     modifier enforceMinimum(uint256 _value) {
         _ensureMinimum(_value);
         _;

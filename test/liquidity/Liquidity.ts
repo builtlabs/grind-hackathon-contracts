@@ -321,10 +321,10 @@ describe("Liquidity", function () {
     });
 
     describe("withdraw", function () {
-        it("Should revert if the value is 0", async function () {
+        it("Should revert if the value is below the minimum", async function () {
             const { sut } = await loadFixture(fixture);
 
-            await expect(sut.withdraw(0)).to.be.revertedWithCustomError(sut, "ValueBelowMinimum");
+            await expect(sut.withdraw(minimumValue - 1n)).to.be.revertedWithCustomError(sut, "ValueBelowMinimum");
         });
 
         describe("_canChangeLiquidity() == true", function () {

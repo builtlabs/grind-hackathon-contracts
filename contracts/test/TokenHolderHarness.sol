@@ -15,10 +15,6 @@ contract TokenHolderHarness is TokenHolder {
 
     // #######################################################################################
 
-    function t_notZero(uint256 _value) external notZero(_value) {
-        // This function is just to test the notZero modifier.
-    }
-
     function t_enforceMinimum(uint256 _value) external enforceMinimum(_value) {
         // This function is just to test the enforceMinimum modifier.
     }

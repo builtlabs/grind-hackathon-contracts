@@ -54,20 +54,6 @@ describe("TokenHolder", function () {
         });
     });
 
-    describe("notZero", function () {
-        it("Should revert if the value is zero", async function () {
-            const { sut } = await loadFixture(fixture);
-
-            await expect(sut.t_notZero(0)).to.be.revertedWithCustomError(sut, "ValueBelowMinimum");
-        });
-
-        it("Should NOT revert if the value is not zero", async function () {
-            const { sut } = await loadFixture(fixture);
-
-            await expect(sut.t_notZero(1n)).to.not.be.reverted;
-        });
-    });
-
     describe("enforceMinimum", function () {
         it("Should revert if the value is less than the minimum", async function () {
             const { sut } = await loadFixture(fixture);
