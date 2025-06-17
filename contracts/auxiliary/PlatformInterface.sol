@@ -91,8 +91,6 @@ contract PlatformInterface is WrappedContext, Ownable {
 
     // #######################################################################################
 
-    // TODO: Double check these tests
-
     /// @notice Starts a new season.
     /// @param gamemodes_ The list of gamemodes for the new season.
     function startSeason(address[] calldata gamemodes_) external onlyOwner {

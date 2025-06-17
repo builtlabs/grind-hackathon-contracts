@@ -159,6 +159,30 @@ describe("HashCrashERC20", function () {
                 sut.placeBet(0n, 1n, { value: ethers.parseEther("1") })
             ).to.be.revertedWithCustomError(sut, "NativeValueNotAllowed");
         });
+
+        it("Should allow token only", async function () {
+            const { sut, token, wallets } = await loadFixture(fixture);
+
+            const liquidity = ethers.parseEther("100");
+            await token.mint(wallets.deployer.address, liquidity);
+            await token.approve(sut.target, liquidity);
+            await sut.deposit(liquidity);
+            
+            await sut.setActive(true);
+
+            await token.mint(wallets.deployer.address, minimumValue);
+            await token.approve(sut.target, minimumValue);
+
+            const index = 10n;
+
+            await sut.placeBet(minimumValue, 10n);
+
+            const bet = await sut.getBet(0n);
+            expect(bet.user).to.equal(wallets.deployer.address);
+            expect(bet.amount).to.equal(minimumValue);
+            expect(bet.cancelled).to.equal(false);
+            expect(bet.cashoutIndex).to.equal(index);
+        });
     })
 
     describe("deposit", function () {
@@ -168,6 +192,18 @@ describe("HashCrashERC20", function () {
             await expect(
                 sut.deposit(0n, { value: ethers.parseEther("1") })
             ).to.be.revertedWithCustomError(sut, "NativeValueNotAllowed");
+        });
+
+        it("Should allow token only", async function () {
+            const { sut, token, wallets } = await loadFixture(fixture);
+
+            await token.mint(wallets.deployer.address, minimumValue);
+            await token.approve(sut.target, minimumValue);
+
+            await sut.deposit(minimumValue);
+
+            const shares = await sut.getShares(wallets.deployer.address);
+            expect(shares).to.equal(minimumValue);
         });
     })
 });

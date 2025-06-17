@@ -52,6 +52,26 @@ describe("Liquidity", function () {
 
             expect(await sut.getMinimum()).to.equal(minimumValue);
         });
+
+        it("Should revert if max exposure is below 100", async function () {
+            const { token } = await loadFixture(fixture);
+
+            const SUT = await ethers.getContractFactory("LiquidityHarness");
+
+            await expect(
+                SUT.deploy(99, lowLiquidityThreshold, token.target, minimumValue)
+            ).to.be.revertedWithCustomError(SUT, "InvalidMaxExposure");
+        });
+
+        it("Should revert if max exposure is above 5000", async function () {
+            const { token } = await loadFixture(fixture);
+
+            const SUT = await ethers.getContractFactory("LiquidityHarness");
+
+            await expect(
+                SUT.deploy(5001, lowLiquidityThreshold, token.target, minimumValue)
+            ).to.be.revertedWithCustomError(SUT, "InvalidMaxExposure");
+        });
     });
 
     describe("setMaxExposure", function () {
