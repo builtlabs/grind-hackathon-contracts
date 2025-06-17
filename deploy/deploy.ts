@@ -11,6 +11,9 @@ interface Verify {
     constructorArguments: any[];
 }
 
+const testnetWeth = "0x9EDCde0257F2386Ce177C3a7FCdd97787F0D841d";
+const mainnetWeth = "0x3439153EB7AF838Ad19d56E1571FBD09333C2809";
+
 const revealer = "0xc2bDed4B045bfdB5F051a13a55ed63FeEA45CB00";
 const platform = "0x25bbEDE914021Fdb13B57d9866bB370965d015c1";
 
@@ -21,6 +24,8 @@ export default async function (runtime: HardhatRuntimeEnvironment) {
 
     const zkProvider = new Provider("https://api.testnet.abs.xyz");
 
+    const weth = runtime.network.name === "abstractTestnet" ? testnetWeth : mainnetWeth;
+
     const wallet = new Wallet(vars.get(runtime.network.name === "abstractTestnet" ? "DEV_PRIVATE_KEY" : "PRIVATE_KEY"), zkProvider);
     const deployer = new Deployer(runtime, wallet);
 
@@ -29,7 +34,7 @@ export default async function (runtime: HardhatRuntimeEnvironment) {
     const seed = vars.get(runtime.network.name === "abstractTestnet" ? "DEV_SEED" : "SEED");
     const ethGenesisHash = getHash(getSalt(seed, 0, 0));
 
-    const platformInterface = await deploy(deployer, "PlatformInterface", [platform, wallet.address]);
+    const platformInterface = await deploy(deployer, "PlatformInterface", [platform, weth, wallet.address]);
     const fixedRTP10x = await deploy(deployer, "FixedRTP10x", []);
 
     const minLiquidityEth = ethers.parseEther("0.01").toString();
@@ -37,15 +42,17 @@ export default async function (runtime: HardhatRuntimeEnvironment) {
         fixedRTP10x.target,
         ethGenesisHash,
         revealer,
+        "1000", // TODO: maxExposureNumerator_
         minLiquidityEth,
         wallet.address,
+        weth,
+        ethers.parseEther("0.001").toString(), // TODO: Min amount
     ]);
 
-    await tx(hashCrash.deposit(ethers.parseEther("0.2"), { value: ethers.parseEther("0.2") }));
+    await tx(hashCrash.deposit("0", { value: ethers.parseEther("0.2") }));
     await tx(hashCrash.setActive(true));
 
     const gamemodes = [hashCrash.target];
-    const validTargets = [hashCrash.target, platformInterface.target];
 
     if (runtime.network.name === "abstractTestnet") {
         const grindGenesisHash = getHash(getSalt(seed, 1, 0));
@@ -59,14 +66,14 @@ export default async function (runtime: HardhatRuntimeEnvironment) {
             fixedRTP100x.target,
             grindGenesisHash,
             revealer,
+            "1000", // TODO: maxExposureNumerator_
             minLiquidityGrind,
             wallet.address,
             grind.target,
+            ethers.parseEther("10").toString(), // TODO: Min amount
         ]);
 
         gamemodes.push(grindCrash.target);
-        validTargets.push(grindCrash.target);
-        validTargets.push(grind.target);
 
         const initialBalance = ethers.parseEther("100000");
         await tx(grind.mint(wallet.address, initialBalance));
@@ -75,7 +82,7 @@ export default async function (runtime: HardhatRuntimeEnvironment) {
         await tx(grindCrash.setActive(true));
     }
 
-    const paymaster = await deploy(deployer, "GeneralPaymaster", [validTargets, wallet.address]);
+    const paymaster = await deploy(deployer, "GeneralPaymaster", [wallet.address]);
     await tx(
         wallet.sendTransaction({
             to: paymaster.target,
