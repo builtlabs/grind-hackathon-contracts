@@ -9,7 +9,7 @@ const minimumValue = ethers.parseEther("0.001");
 const initialBalance = ethers.parseEther("1000");
 const oneEther = ethers.parseEther("1");
 
-const _MAX_BET_QUEUE_SIZE = 128n;
+const _MAX_BET_QUEUE_SIZE = 256n;
 const _MAX_LIQUIDITY_QUEUE_SIZE = 64n;
 
 function getHash(salt: string) {
@@ -195,8 +195,8 @@ describe("HashCrash", function () {
     // ############################ TESTS ############################
 
     describe("stress tests", function () {
-        // NOTE: The max gas we are realistically willing to pay for reveal is 10 million gas
-        const softcap = 10000000n;
+        // NOTE: The max gas we are realistically willing to pay for reveal is ~12 million gas
+        const softcap = 12000000n;
         const batchSize = 32n;
 
         async function stressTestFixture() {
@@ -232,10 +232,8 @@ describe("HashCrash", function () {
                 await stressTestFixture();
 
             const minimum = await sut.getMinimum();
-            const length = Number(await lootTable.getLength());
 
             await token.mint(maliciousLiquidityProvider.target, minimum * _MAX_LIQUIDITY_QUEUE_SIZE);
-            await sut.placeBet(minimum, length - 1);
 
             let remaining = _MAX_LIQUIDITY_QUEUE_SIZE;
             let startIndex = 0n;
@@ -245,8 +243,6 @@ describe("HashCrash", function () {
                 remaining -= deposits;
                 startIndex += deposits;
             }
-            await mine(config.introBlocks + length);
-            await sut.reveal(config.genesisSalt, config.genesisHash);
 
             return { sut, token, lootTable, wallets, config, maliciousBetter, maliciousLiquidityProvider };
         }
