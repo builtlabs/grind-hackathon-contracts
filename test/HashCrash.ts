@@ -10,6 +10,7 @@ const initialBalance = ethers.parseEther("1000");
 const oneEther = ethers.parseEther("1");
 
 const _MAX_BET_QUEUE_SIZE = 128n;
+const _MAX_LIQUIDITY_QUEUE_SIZE = 64n;
 
 function getHash(salt: string) {
     return ethers.keccak256(ethers.solidityPacked(["bytes32"], [salt]));
@@ -192,6 +193,216 @@ describe("HashCrash", function () {
     }
 
     // ############################ TESTS ############################
+
+    describe("stress tests", function () {
+        // NOTE: The max gas we are realistically willing to pay for reveal is 10 million gas
+        const softcap = 10000000n;
+        const batchSize = 32n;
+
+        async function stressTestFixture() {
+            const { sut, token, wallets, config } = await activeFixture();
+
+            const initialBalance = ethers.parseEther("100000");
+            await token.mint(wallets.deployer.address, initialBalance);
+            await token.approve(sut.target, initialBalance);
+            await sut.deposit(initialBalance);
+
+            const MaliciousBetter = await ethers.getContractFactory("MaliciousBetter");
+            const maliciousBetter = await MaliciousBetter.deploy();
+            await maliciousBetter.waitForDeployment();
+
+            const MaliciousLiquidityProvider = await ethers.getContractFactory("MaliciousLiquidityProvider");
+            const maliciousLiquidityProvider = await MaliciousLiquidityProvider.deploy();
+            await maliciousLiquidityProvider.waitForDeployment();
+
+            const NoDeathTable = await ethers.getContractFactory("NoDeathTable");
+            const lootTable = await NoDeathTable.deploy();
+            await lootTable.waitForDeployment();
+
+            await sut.setLootTable(lootTable.target);
+
+            await token.mint(wallets.deployer.address, initialBalance);
+            await token.approve(sut.target, initialBalance);
+
+            return { sut, token, lootTable, wallets, config, maliciousBetter, maliciousLiquidityProvider };
+        }
+
+        async function stressTestWithDepositsFixture() {
+            const { sut, token, lootTable, wallets, config, maliciousBetter, maliciousLiquidityProvider } =
+                await stressTestFixture();
+
+            const minimum = await sut.getMinimum();
+            const length = Number(await lootTable.getLength());
+
+            await token.mint(maliciousLiquidityProvider.target, minimum * _MAX_LIQUIDITY_QUEUE_SIZE);
+            await sut.placeBet(minimum, length - 1);
+
+            let remaining = _MAX_LIQUIDITY_QUEUE_SIZE;
+            let startIndex = 0n;
+            while (remaining > 0n) {
+                const deposits = remaining > batchSize ? batchSize : remaining;
+                await maliciousLiquidityProvider.multiDeposit(sut.target, token.target, deposits, startIndex);
+                remaining -= deposits;
+                startIndex += deposits;
+            }
+            await mine(config.introBlocks + length);
+            await sut.reveal(config.genesisSalt, config.genesisHash);
+
+            return { sut, token, lootTable, wallets, config, maliciousBetter, maliciousLiquidityProvider };
+        }
+
+        it("Should reveal with max winning bets", async function () {
+            const { sut, token, lootTable, maliciousBetter, config } = await loadFixture(stressTestFixture);
+
+            const minBet = await sut.getMinimum();
+            const length = Number(await lootTable.getLength());
+
+            await token.mint(maliciousBetter.target, minBet * _MAX_BET_QUEUE_SIZE);
+
+            let remaining = _MAX_BET_QUEUE_SIZE;
+            while (remaining > 0n) {
+                const bets = remaining > batchSize ? batchSize : remaining;
+                await maliciousBetter.multiBet(sut.target, token.target, bets, minBet, length - 1);
+                remaining -= bets;
+            }
+
+            await mine(config.introBlocks + length);
+
+            const tx = await sut.reveal(config.genesisSalt, config.genesisHash);
+            const receipt = await tx.wait();
+
+            if (!receipt) {
+                throw new Error("Reveal transaction failed");
+            }
+
+            expect(receipt.gasUsed).to.be.lessThan(softcap);
+        });
+
+        it("Should reveal with max cancelled bets", async function () {
+            const { sut, token, lootTable, maliciousBetter, config } = await loadFixture(stressTestFixture);
+
+            const minBet = await sut.getMinimum();
+            const length = Number(await lootTable.getLength());
+
+            await token.mint(maliciousBetter.target, minBet * _MAX_BET_QUEUE_SIZE);
+
+            let remaining = _MAX_BET_QUEUE_SIZE;
+            let startIndex = 0n;
+            while (remaining > 0n) {
+                const bets = remaining > batchSize ? batchSize : remaining;
+                await maliciousBetter.multiBetCancel(sut.target, token.target, bets, minBet, length - 1, startIndex);
+                remaining -= bets;
+                startIndex += bets;
+            }
+
+            await mine(config.introBlocks + length);
+
+            const tx = await sut.reveal(config.genesisSalt, config.genesisHash);
+            const receipt = await tx.wait();
+
+            if (!receipt) {
+                throw new Error("Reveal transaction failed");
+            }
+
+            expect(receipt.gasUsed).to.be.lessThan(softcap);
+        });
+
+        it("Should reveal with max liquidity deposits", async function () {
+            const { sut, token, lootTable, maliciousLiquidityProvider, config } = await loadFixture(stressTestFixture);
+
+            const minimum = await sut.getMinimum();
+            const length = Number(await lootTable.getLength());
+
+            await token.mint(maliciousLiquidityProvider.target, minimum * _MAX_LIQUIDITY_QUEUE_SIZE);
+            await sut.placeBet(minimum, length - 1);
+
+            let remaining = _MAX_LIQUIDITY_QUEUE_SIZE;
+            let startIndex = 0n;
+            while (remaining > 0n) {
+                const deposits = remaining > batchSize ? batchSize : remaining;
+                await maliciousLiquidityProvider.multiDeposit(sut.target, token.target, deposits, startIndex);
+                remaining -= deposits;
+                startIndex += deposits;
+            }
+            await mine(config.introBlocks + length);
+
+            const tx = await sut.reveal(config.genesisSalt, config.genesisHash);
+            const receipt = await tx.wait();
+
+            if (!receipt) {
+                throw new Error("Reveal transaction failed");
+            }
+
+            expect(receipt.gasUsed).to.be.lessThan(softcap);
+        });
+
+        it("Should reveal with max liquidity withdraws", async function () {
+            const { sut, lootTable, maliciousLiquidityProvider, config } =
+                await loadFixture(stressTestWithDepositsFixture);
+
+            const minDeposit = await sut.getMinimum();
+            const length = Number(await lootTable.getLength());
+
+            await sut.placeBet(minDeposit, length - 1);
+
+            let remaining = _MAX_LIQUIDITY_QUEUE_SIZE;
+            let startIndex = 0n;
+            while (remaining > 0n) {
+                const withdraws = remaining > batchSize ? batchSize : remaining;
+                await maliciousLiquidityProvider.multiWithdraw(sut.target, withdraws, startIndex);
+                remaining -= withdraws;
+                startIndex += withdraws;
+            }
+
+            await mine(config.introBlocks + length);
+
+            const tx = await sut.reveal(config.genesisSalt, config.genesisHash);
+            const receipt = await tx.wait();
+
+            if (!receipt) {
+                throw new Error("Reveal transaction failed");
+            }
+
+            expect(receipt.gasUsed).to.be.lessThan(softcap);
+        });
+
+        it("Should reveal with max winning bets AND liquidity withdraws", async function () {
+            const { sut, token, lootTable, maliciousBetter, maliciousLiquidityProvider, config } =
+                await loadFixture(stressTestWithDepositsFixture);
+
+            const minimum = await sut.getMinimum();
+            const length = Number(await lootTable.getLength());
+
+            await token.mint(maliciousBetter.target, minimum * _MAX_BET_QUEUE_SIZE);
+
+            let remaining = _MAX_BET_QUEUE_SIZE;
+            while (remaining > 0n) {
+                const bets = remaining > batchSize ? batchSize : remaining;
+                await maliciousBetter.multiBet(sut.target, token.target, bets, minimum, length - 1);
+                remaining -= bets;
+            }
+
+            remaining = _MAX_LIQUIDITY_QUEUE_SIZE;
+            let startIndex = 0n;
+            while (remaining > 0n) {
+                const withdraws = remaining > batchSize ? batchSize : remaining;
+                await maliciousLiquidityProvider.multiWithdraw(sut.target, withdraws, startIndex);
+                remaining -= withdraws;
+                startIndex += withdraws;
+            }
+
+            await mine(config.introBlocks + length);
+
+            const tx = await sut.reveal(config.genesisSalt, config.genesisHash);
+            const receipt = await tx.wait();
+
+            if (!receipt) {
+                throw new Error("Reveal transaction failed");
+            }
+
+            expect(receipt.gasUsed).to.be.lessThan(softcap);
+        });
+    });
 
     describe("constructor", function () {
         it("Should set the owner address", async function () {
@@ -934,10 +1145,7 @@ describe("HashCrash", function () {
         it("Should revert if the amount is below the minimum", async function () {
             const { sut } = await loadFixture(liquidFixture);
 
-            await expect(sut.placeBet(minimumValue - 1n, 10)).to.be.revertedWithCustomError(
-                sut,
-                "ValueBelowMinimum"
-            );
+            await expect(sut.placeBet(minimumValue - 1n, 10)).to.be.revertedWithCustomError(sut, "ValueBelowMinimum");
         });
 
         describe("_initialiseRound", function () {
