@@ -2,20 +2,28 @@
 pragma solidity ^0.8.24;
 
 import { HashCrash } from "../HashCrash.sol";
-import { NativeHolder } from "../currency/NativeHolder.sol";
+import { TokenHolder } from "../currency/TokenHolder.sol";
+import { WrappedContext } from "../currency/WrappedContext.sol";
 
 /// @title HashCrashNative
 /// @notice A hashcrash implementation using the chains native token.
-contract HashCrashNative is HashCrash, NativeHolder {
+contract HashCrashNative is HashCrash, WrappedContext {
     constructor(
         address lootTable_,
         bytes32 genesisHash_,
         address hashProducer_,
+        uint128 maxExposureNumerator_,
         uint128 lowLiquidityThreshold_,
-        uint256 minimumValue_,
-        address owner_
+        address owner_,
+        address token_,
+        uint256 minimumValue_
     )
-        HashCrash(lootTable_, genesisHash_, hashProducer_, lowLiquidityThreshold_, minimumValue_, owner_)
-        NativeHolder()
+        HashCrash(lootTable_, genesisHash_, hashProducer_, maxExposureNumerator_, lowLiquidityThreshold_, owner_)
+        TokenHolder(token_, minimumValue_)
+        WrappedContext(token_)
     {}
+
+    function _receiveValue(address _from, uint256 _tokenValue) internal override returns (uint256) {
+        return _nativeToWrapped() + super._receiveValue(_from, _tokenValue);
+    }
 }

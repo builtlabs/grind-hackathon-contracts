@@ -1,14 +1,11 @@
-import { loadFixture, mine } from "@nomicfoundation/hardhat-toolbox/network-helpers";
+import { loadFixture } from "@nomicfoundation/hardhat-toolbox/network-helpers";
 import { expect } from "chai";
 import { id } from "ethers";
 import { ethers } from "hardhat";
 
-const _MAX_BET_QUEUE_SIZE = 128n;
-const _MAX_LIQUIDITY_QUEUE_SIZE = 64n;
-
+const maxExposureNumerator = 1000;
 const lowLiquidityThreshold = ethers.parseEther("0.1");
 const minimumValue = ethers.parseEther("0.01");
-const oneEther = ethers.parseEther("1");
 
 function getHash(salt: string) {
     return ethers.keccak256(ethers.solidityPacked(["bytes32"], [salt]));
@@ -20,13 +17,9 @@ describe("HashCrashNative", function () {
 
         const genesisSalt = ethers.hexlify(ethers.randomBytes(32));
 
-        const NativeBlocking = await ethers.getContractFactory("NativeBlocking");
-        const nativeBlocking = await NativeBlocking.deploy();
-        await nativeBlocking.waitForDeployment();
-
-        const NativeGasAbuser = await ethers.getContractFactory("NativeGasAbuser");
-        const nativeGasAbuser = await NativeGasAbuser.deploy();
-        await nativeGasAbuser.waitForDeployment();
+        const WETH = await ethers.getContractFactory("WETH9");
+        const weth = await WETH.deploy();
+        await weth.waitForDeployment();
 
         const FixedRTP10x = await ethers.getContractFactory("FixedRTP10x");
         const lootTable = await FixedRTP10x.deploy();
@@ -37,17 +30,18 @@ describe("HashCrashNative", function () {
             lootTable.target,
             getHash(genesisSalt),
             deployer.address,
+            maxExposureNumerator,
             lowLiquidityThreshold,
-            minimumValue,
-            deployer.address
+            deployer.address,
+            weth.target,
+            minimumValue
         );
         await sut.waitForDeployment();
 
         return {
             sut,
+            weth,
             lootTable,
-            nativeBlocking,
-            nativeGasAbuser,
             wallets: {
                 deployer,
             },
@@ -123,16 +117,18 @@ describe("HashCrashNative", function () {
         });
 
         it("Should emit LootTableUpdated", async function () {
-            const { lootTable, config } = await loadFixture(fixture);
+            const { weth, lootTable, config } = await loadFixture(fixture);
 
             const HASHCRASH = await ethers.getContractFactory("HashCrashNative");
             const tx = await HASHCRASH.deploy(
                 lootTable.target,
                 config.genesisHash,
                 config.hashProducer,
+                maxExposureNumerator,
                 lowLiquidityThreshold,
-                minimumValue,
-                config.owner
+                config.owner,
+                weth.target,
+                minimumValue
             );
             const receipt = (await tx.deploymentTransaction()!.wait())!;
 
@@ -148,228 +144,131 @@ describe("HashCrashNative", function () {
         });
     });
 
-    describe("integrations", function () {
-        // NOTE: The max is around 8m if every single receive reverts, 3m otherwise.
-        const softcap = 10000000n;
-        const batchSize = 64n;
+    describe("placeBet", function () {
+        it("Should allow eth only", async function () {
+            const { sut, wallets } = await loadFixture(fixture);
 
-        async function integrationFixture() {
-            const { sut, wallets, config } = await fixture();
-
+            await sut.deposit(0n, {
+                value: ethers.parseEther("100"),
+            });
             await sut.setActive(true);
 
-            const initialBalance = ethers.parseEther("1000");
-            await sut.deposit(initialBalance, { value: initialBalance });
+            const nativeAmount = ethers.parseEther("0.1");
 
-            const MaliciousBetter = await ethers.getContractFactory("MaliciousBetter");
-            const maliciousBetter = await MaliciousBetter.deploy();
-            await maliciousBetter.waitForDeployment();
+            const index = 10n;
 
-            const MaliciousLiquidityProvider = await ethers.getContractFactory("MaliciousLiquidityProvider");
-            const maliciousLiquidityProvider = await MaliciousLiquidityProvider.deploy();
-            await maliciousLiquidityProvider.waitForDeployment();
+            await sut.placeBet(0n, 10n, {
+                value: nativeAmount,
+            });
 
-            const NoDeathTable = await ethers.getContractFactory("NoDeathTable");
-            const lootTable = await NoDeathTable.deploy();
-            await lootTable.waitForDeployment();
-
-            await sut.setLootTable(lootTable.target);
-
-            return { sut, lootTable, wallets, config, maliciousBetter, maliciousLiquidityProvider };
-        }
-
-        async function integrationFixtureWithDeposits() {
-            const { sut, lootTable, wallets, config, maliciousBetter, maliciousLiquidityProvider } =
-                await integrationFixture();
-
-            const minimum = await sut.getMinimum();
-            const length = Number(await lootTable.getLength());
-
-            await sut.placeBet(minimum, length - 1, { value: minimum });
-
-            let remaining = _MAX_LIQUIDITY_QUEUE_SIZE;
-            let startIndex = 0n;
-            while (remaining > 0n) {
-                const deposits = remaining > batchSize ? batchSize : remaining;
-                await maliciousLiquidityProvider.multiDepositNative(sut.target, deposits, startIndex, {
-                    value: minimum * deposits,
-                });
-                remaining -= deposits;
-                startIndex += deposits;
-            }
-            await mine(config.introBlocks + length);
-            await sut.reveal(config.genesisSalt, config.genesisHash);
-
-            return { sut, lootTable, wallets, config, maliciousBetter, maliciousLiquidityProvider };
-        }
-
-        it("Should reveal with max winning bets", async function () {
-            const { sut, lootTable, maliciousBetter, config } = await loadFixture(integrationFixture);
-
-            const minBet = await sut.getMinimum();
-            const length = Number(await lootTable.getLength());
-
-            let remaining = _MAX_BET_QUEUE_SIZE;
-            while (remaining > 0n) {
-                const bets = remaining > batchSize ? batchSize : remaining;
-                await maliciousBetter.multiBetNative(sut.target, bets, minBet, length - 1, {
-                    value: minBet * bets,
-                });
-                remaining -= bets;
-            }
-
-            await mine(config.introBlocks + length);
-
-            const tx = await sut.reveal(config.genesisSalt, config.genesisHash);
-            const receipt = await tx.wait();
-
-            if (!receipt) {
-                throw new Error("Reveal transaction failed");
-            }
-
-            expect(receipt.gasUsed).to.be.lessThan(softcap);
+            const bet = await sut.getBet(0n);
+            expect(bet.user).to.equal(wallets.deployer.address);
+            expect(bet.amount).to.equal(nativeAmount);
+            expect(bet.cancelled).to.equal(false);
+            expect(bet.cashoutIndex).to.equal(index);
         });
 
-        it("Should reveal with max cancelled bets", async function () {
-            const { sut, lootTable, maliciousBetter, config } = await loadFixture(integrationFixture);
+        it("Should allow weth only", async function () {
+            const { sut, weth, wallets } = await loadFixture(fixture);
 
-            const minBet = await sut.getMinimum();
-            const length = Number(await lootTable.getLength());
-
-            let remaining = _MAX_BET_QUEUE_SIZE;
-            let startIndex = 0n;
-            while (remaining > 0n) {
-                const bets = remaining > batchSize ? batchSize : remaining;
-                await maliciousBetter.multiBetCancelNative(sut.target, bets, minBet, length - 1, startIndex, {
-                    value: minBet * bets,
-                });
-                remaining -= bets;
-                startIndex += bets;
-            }
-
-            await mine(config.introBlocks + length);
-
-            const tx = await sut.reveal(config.genesisSalt, config.genesisHash);
-            const receipt = await tx.wait();
-
-            if (!receipt) {
-                throw new Error("Reveal transaction failed");
-            }
-
-            expect(receipt.gasUsed).to.be.lessThan(softcap);
-        });
-
-        it("Should reveal with max liquidity queue", async function () {
-            const { sut, lootTable, maliciousLiquidityProvider, config } =
-                await loadFixture(integrationFixtureWithDeposits);
-
-            const minDeposit = await sut.getMinimum();
-            const length = Number(await lootTable.getLength());
-
-            await sut.placeBet(minDeposit, length - 1, { value: minDeposit });
-
-            let remaining = _MAX_LIQUIDITY_QUEUE_SIZE;
-            let startIndex = 0n;
-            while (remaining > 0n) {
-                const withdraws = remaining > batchSize ? batchSize : remaining;
-                await maliciousLiquidityProvider.multiWithdraw(sut.target, withdraws, startIndex);
-                remaining -= withdraws;
-                startIndex += withdraws;
-            }
-
-            await mine(config.introBlocks + length);
-
-            const tx = await sut.reveal(config.genesisSalt, config.genesisHash);
-            const receipt = await tx.wait();
-
-            if (!receipt) {
-                throw new Error("Reveal transaction failed");
-            }
-
-            expect(receipt.gasUsed).to.be.lessThan(softcap);
-        });
-
-        it("Should reveal with max winning bets AND liquidity queue", async function () {
-            const { sut, lootTable, maliciousBetter, maliciousLiquidityProvider, config } =
-                await loadFixture(integrationFixtureWithDeposits);
-
-            const minimum = await sut.getMinimum();
-            const length = Number(await lootTable.getLength());
-
-            let remaining = _MAX_BET_QUEUE_SIZE;
-            while (remaining > 0n) {
-                const bets = remaining > batchSize ? batchSize : remaining;
-                await maliciousBetter.multiBetNative(sut.target, bets, minimum, length - 1, {
-                    value: minimum * bets,
-                });
-                remaining -= bets;
-            }
-
-            remaining = _MAX_LIQUIDITY_QUEUE_SIZE;
-            let startIndex = 0n;
-            while (remaining > 0n) {
-                const withdraws = remaining > batchSize ? batchSize : remaining;
-                await maliciousLiquidityProvider.multiWithdraw(sut.target, withdraws, startIndex);
-                remaining -= withdraws;
-                startIndex += withdraws;
-            }
-
-            await mine(config.introBlocks + length);
-
-            const tx = await sut.reveal(config.genesisSalt, config.genesisHash);
-            const receipt = await tx.wait();
-
-            if (!receipt) {
-                throw new Error("Reveal transaction failed");
-            }
-
-            expect(receipt.gasUsed).to.be.lessThan(softcap);
-        });
-
-        it("Should not get bricked by a malicious winner using revert", async function () {
-            const { sut, nativeBlocking, config } = await loadFixture(fixture);
-
-            const liquidity = oneEther * 100n;
-
-            await sut.deposit(liquidity, { value: liquidity });
+            await sut.deposit(0n, {
+                value: ethers.parseEther("100"),
+            });
             await sut.setActive(true);
 
-            const LootTable = await ethers.getContractFactory("NoDeathTable");
-            const lootTable = await LootTable.deploy();
-            await lootTable.waitForDeployment();
+            const wethAmount = ethers.parseEther("0.1");
+            await weth.deposit({
+                value: wethAmount,
+            });
+            await weth.approve(sut.target, wethAmount);
 
-            await sut.setLootTable(lootTable.target);
+            const index = 10n;
 
-            const calldata = sut.interface.encodeFunctionData("placeBet", [oneEther, 3]);
-            await nativeBlocking.call(sut.target, calldata, { value: oneEther });
+            await sut.placeBet(wethAmount, 10n);
 
-            const length = await lootTable.getLength();
-            await mine(config.introBlocks + Number(length));
-
-            await expect(sut.reveal(config.genesisSalt, ethers.hexlify(ethers.randomBytes(32)))).to.not.be.reverted;
+            const bet = await sut.getBet(0n);
+            expect(bet.user).to.equal(wallets.deployer.address);
+            expect(bet.amount).to.equal(wethAmount);
+            expect(bet.cancelled).to.equal(false);
+            expect(bet.cashoutIndex).to.equal(index);
         });
 
-        it("Should not get bricked by a malicious winner using infinite gas", async function () {
-            const { sut, nativeGasAbuser, config } = await loadFixture(fixture);
+        it("Should allow a mixture", async function () {
+            const { sut, weth, wallets } = await loadFixture(fixture);
 
-            const liquidity = oneEther * 100n;
-
-            await sut.deposit(liquidity, { value: liquidity });
+            await sut.deposit(0n, {
+                value: ethers.parseEther("100"),
+            });
             await sut.setActive(true);
 
-            const LootTable = await ethers.getContractFactory("NoDeathTable");
-            const lootTable = await LootTable.deploy();
-            await lootTable.waitForDeployment();
+            const nativeAmount = ethers.parseEther("0.1");
 
-            await sut.setLootTable(lootTable.target);
+            const wethAmount = ethers.parseEther("0.2");
+            await weth.deposit({
+                value: wethAmount,
+            });
+            await weth.approve(sut.target, wethAmount);
 
-            const calldata = sut.interface.encodeFunctionData("placeBet", [oneEther, 3]);
-            await nativeGasAbuser.call(sut.target, calldata, { value: oneEther });
+            const index = 10n;
 
-            const length = await lootTable.getLength();
-            await mine(config.introBlocks + Number(length));
+            await sut.placeBet(wethAmount, 10n, {
+                value: nativeAmount,
+            });
 
-            await expect(sut.reveal(config.genesisSalt, ethers.hexlify(ethers.randomBytes(32)))).to.not.be.reverted;
+            const bet = await sut.getBet(0n);
+            expect(bet.user).to.equal(wallets.deployer.address);
+            expect(bet.amount).to.equal(nativeAmount + wethAmount);
+            expect(bet.cancelled).to.equal(false);
+            expect(bet.cashoutIndex).to.equal(index);
+        });
+    });
+
+    describe("deposit", function () {
+        it("Should allow eth only", async function () {
+            const { sut, wallets } = await loadFixture(fixture);
+
+            const nativeAmount = ethers.parseEther("0.1");
+
+            await sut.deposit(0n, {
+                value: nativeAmount,
+            });
+
+            const shares = await sut.getShares(wallets.deployer.address);
+            expect(shares).to.equal(nativeAmount);
+        });
+
+        it("Should allow weth only", async function () {
+            const { sut, weth, wallets } = await loadFixture(fixture);
+
+            const wethAmount = ethers.parseEther("0.1");
+            await weth.deposit({
+                value: wethAmount,
+            });
+            await weth.approve(sut.target, wethAmount);
+
+            await sut.deposit(wethAmount);
+
+            const shares = await sut.getShares(wallets.deployer.address);
+            expect(shares).to.equal(wethAmount);
+        });
+
+        it("Should allow a mixture", async function () {
+            const { sut, weth, wallets } = await loadFixture(fixture);
+
+            const nativeAmount = ethers.parseEther("0.1");
+
+            const wethAmount = ethers.parseEther("0.2");
+            await weth.deposit({
+                value: wethAmount,
+            });
+            await weth.approve(sut.target, wethAmount);
+
+            await sut.deposit(wethAmount, {
+                value: nativeAmount,
+            });
+
+            const shares = await sut.getShares(wallets.deployer.address);
+            expect(shares).to.equal(nativeAmount + wethAmount);
         });
     });
 });
