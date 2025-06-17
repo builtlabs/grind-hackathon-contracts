@@ -2,10 +2,14 @@
 pragma solidity ^0.8.24;
 
 import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
+import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import { SafeERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
 /// @title ValueHolder
-/// @notice A base contract capable of holding and managing value.
-abstract contract ValueHolder is Ownable {
+/// @notice A base contract capable of holding and managing a given ERC20 token.
+abstract contract TokenHolder is Ownable {
+    IERC20 private immutable _token;
+
     uint256 private _stagedBalance;
     uint256 private _minimum;
 
@@ -14,36 +18,37 @@ abstract contract ValueHolder is Ownable {
     event StagedBalanceIncreased(uint256 amount);
     event StagedBalanceDecreased(uint256 amount);
 
-    error ValueHolderValueTooSmall();
-    error ValueHolderInsufficientStagedBalance();
-    error ValueHolderInsufficientAvailableBalance();
+    error InvalidRescue();
+    error ValueBelowMinimum();
+    error NativeRescueFailed();
+    error InsufficientStagedBalance();
+    error InsufficientAvailableBalance();
 
     // #######################################################################################
 
-    modifier hasAvailableBalance(uint256 _value) {
-        if (_getAvailableBalance() < _value) {
-            revert ValueHolderInsufficientAvailableBalance();
-        }
-        _;
-    }
-
     modifier notZero(uint256 _value) {
-        if (_value == 0) revert ValueHolderValueTooSmall();
+        if (_value == 0) revert ValueBelowMinimum();
         _;
     }
 
     modifier enforceMinimum(uint256 _value) {
-        if (_value < _minimum) revert ValueHolderValueTooSmall();
+        _ensureMinimum(_value);
         _;
     }
 
     // #######################################################################################
 
-    constructor(uint256 _minimumValue) {
+    constructor(address token_, uint256 _minimumValue) {
+        _token = IERC20(token_);
         _setMinimum(_minimumValue);
     }
 
     // #######################################################################################
+
+    /// @notice Returns the address of the ERC20 token used by this contract.
+    function token() external view returns (address) {
+        return address(_token);
+    }
 
     /// @notice Returns the reserved balance held within this contract.
     function getStagedBalance() external view returns (uint256) {
@@ -67,6 +72,15 @@ abstract contract ValueHolder is Ownable {
         _setMinimum(_minimumValue);
     }
 
+    /// @notice allows for the rescue of tokens that are not the primary token of this contract.
+    /// @param _toRescue The address of the token to rescue.
+    function rescueTokens(IERC20 _toRescue) external onlyOwner {
+        uint256 tokenBalance = _toRescue.balanceOf(address(this));
+
+        if (_token == _toRescue || tokenBalance == 0) revert InvalidRescue();
+        SafeERC20.safeTransfer(_toRescue, owner(), tokenBalance);
+    }
+
     // #######################################################################################
 
     function _stageAmount(uint256 _amount) internal {
@@ -79,7 +93,7 @@ abstract contract ValueHolder is Ownable {
 
     function _unstageAmount(uint256 _amount) internal {
         if (_stagedBalance < _amount) {
-            revert ValueHolderInsufficientStagedBalance();
+            revert InsufficientStagedBalance();
         }
 
         unchecked {
@@ -90,7 +104,7 @@ abstract contract ValueHolder is Ownable {
     }
 
     function _setMinimum(uint256 _minimumValue) internal {
-        if (_minimumValue == 0) revert ValueHolderValueTooSmall();
+        if (_minimumValue == 0) revert ValueBelowMinimum();
         _minimum = _minimumValue;
     }
 
@@ -98,15 +112,32 @@ abstract contract ValueHolder is Ownable {
         return _minimum;
     }
 
+    function _ensureMinimum(uint256 _value) internal view {
+        if (_value < _getMinimum()) revert ValueBelowMinimum();
+    }
+
     function _getAvailableBalance() internal view returns (uint256) {
         return _getBalance() - _stagedBalance;
     }
 
+    function _getBalance() internal view returns (uint256) {
+        return _token.balanceOf(address(this));
+    }
+
+    function _sendValue(address _to, uint256 _value) internal {
+        if (_getAvailableBalance() < _value) {
+            revert InsufficientAvailableBalance();
+        }
+
+        SafeERC20.safeTransfer(_token, _to, _value);
+    }
+
     // #######################################################################################
 
-    function _getBalance() internal view virtual returns (uint256);
-
-    function _receiveValue(address _from, uint256 _value) internal virtual;
-
-    function _sendValue(address _to, uint256 _value) internal virtual;
+    function _receiveValue(address _from, uint256 _tokenValue) internal virtual returns (uint256) {
+        if (_tokenValue > 0) {
+            SafeERC20.safeTransferFrom(_token, _from, address(this), _tokenValue);
+        }
+        return _tokenValue;
+    }
 }
