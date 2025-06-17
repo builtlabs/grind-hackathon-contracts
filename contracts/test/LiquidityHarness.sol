@@ -2,10 +2,11 @@
 pragma solidity ^0.8.24;
 
 import { Liquidity } from "../liquidity/Liquidity.sol";
-import { ERC20Holder } from "../currency/ERC20Holder.sol";
+import { TokenHolder } from "../currency/TokenHolder.sol";
+
 import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
 
-contract LiquidityHarness is Liquidity, ERC20Holder {
+contract LiquidityHarness is Liquidity {
     event OnLowLiquidity();
 
     bool public canChangeLiquidity;
@@ -14,10 +15,11 @@ contract LiquidityHarness is Liquidity, ERC20Holder {
     // #######################################################################################
 
     constructor(
+        uint128 maxExposureNumerator_,
         uint128 lowLiquidityThreshold_,
-        uint256 minimumValue_,
-        address token_
-    ) Liquidity(lowLiquidityThreshold_, minimumValue_) ERC20Holder(token_) Ownable(msg.sender) {
+        address token_,
+        uint256 minimumValue_
+    ) Liquidity(maxExposureNumerator_, lowLiquidityThreshold_) TokenHolder(token_, minimumValue_) Ownable(msg.sender) {
         round = 1;
     }
 

@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import { ValueHolder } from "../currency/ValueHolder.sol";
+import { TokenHolder } from "../currency/TokenHolder.sol";
 
 /// @title Liquidity
 /// @notice A base contract for managing liquidity.
-abstract contract Liquidity is ValueHolder {
+abstract contract Liquidity is TokenHolder {
     uint256 constant _MAX_LIQUIDITY_QUEUE_SIZE = 64;
     uint256 constant _DENOMINATOR = 10000;
 
@@ -47,10 +47,10 @@ abstract contract Liquidity is ValueHolder {
     // #######################################################################################
 
     /// @notice Constructor sets the initial max liquidity exposure to 10% and the low liquidity threshold.
+    /// @param maxExposureNumerator_ The numerator for the maximum exposure, must be between 100 and 5000 (1% to 50%).
     /// @param lowLiquidityThreshold_ The threshold below which the parent is notified the _availableLiquidity is low.
-    /// @param minimumValue_ The minimum value that can be used for deposits.
-    constructor(uint128 lowLiquidityThreshold_, uint256 minimumValue_) ValueHolder(minimumValue_) {
-        _maxExposureNumerator = 1000; // 10%
+    constructor(uint128 maxExposureNumerator_, uint128 lowLiquidityThreshold_) {
+        _setMaxExposure(maxExposureNumerator_);
         _lowLiquidityThreshold = lowLiquidityThreshold_;
     }
 
@@ -59,11 +59,7 @@ abstract contract Liquidity is ValueHolder {
     /// @notice Sets the maximum exposure numerator.
     /// @param _numerator The numerator for the maximum exposure, must be between 100 and 5000 (1% to 50%).
     function setMaxExposure(uint128 _numerator) external onlyOwner {
-        if (_numerator < 100 || _numerator > 5000) {
-            revert InvalidMaxExposure();
-        }
-
-        _maxExposureNumerator = _numerator;
+        _setMaxExposure(_numerator);
     }
 
     /// @notice Sets the low liquidity threshold.
@@ -76,7 +72,7 @@ abstract contract Liquidity is ValueHolder {
 
     /// @notice Returns the current available liquidity.
     function getAvailableLiquidity() external view returns (uint256) {
-        return _availableLiquidity;
+        return _getAvailableLiquidity();
     }
 
     /// @notice Returns the current maximum exposure numerator.
@@ -122,10 +118,13 @@ abstract contract Liquidity is ValueHolder {
     // #######################################################################################
 
     /// @notice Either deposits, or queues a deposit of the given amount by the sender.
-    /// @param _amount The amount to deposit, must be greater than zero.
-    function deposit(uint256 _amount) external payable enforceMinimum(_amount) {
-        // Standardize behavior between native and ERC20 deposits.
-        _receiveValue(msg.sender, _amount);
+    /// @param _amount The token amount to deposit.
+    function deposit(uint256 _amount) external payable {
+        // Wrap any native ether, standardize behavior between weth and other erc20's.
+        _amount = _receiveValue(msg.sender, _amount);
+
+        // Ensure the amount is at least the minimum required.
+        _ensureMinimum(_amount);
 
         // We stage because this amount should not become available until the deposit is processed.
         _stageAmount(_amount);
@@ -158,7 +157,7 @@ abstract contract Liquidity is ValueHolder {
 
     // #######################################################################################
 
-    function _getRoundLiquidity() internal view returns (uint256) {
+    function _getAvailableLiquidity() internal view returns (uint256) {
         return _availableLiquidity;
     }
 
@@ -223,6 +222,14 @@ abstract contract Liquidity is ValueHolder {
     }
 
     // #######################################################################################
+
+    function _setMaxExposure(uint128 _numerator) private {
+        if (_numerator < 100 || _numerator > 5000) {
+            revert InvalidMaxExposure();
+        }
+
+        _maxExposureNumerator = _numerator;
+    }
 
     function _queueLiquidityChange(uint8 _action, uint256 _amount) private {
         uint64 round = _getRound();

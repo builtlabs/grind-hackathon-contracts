@@ -2,6 +2,7 @@ import { loadFixture } from "@nomicfoundation/hardhat-toolbox/network-helpers";
 import { expect } from "chai";
 import { ethers } from "hardhat";
 
+const maxExposureNumerator = 1000;
 const lowLiquidityThreshold = ethers.parseEther("0.1");
 const minimumValue = ethers.parseEther("0.01");
 const oneEther = ethers.parseEther("1");
@@ -17,7 +18,7 @@ describe("Liquidity", function () {
         await token.waitForDeployment();
 
         const SUT = await ethers.getContractFactory("LiquidityHarness");
-        const sut = await SUT.deploy(lowLiquidityThreshold, minimumValue, token.target);
+        const sut = await SUT.deploy(maxExposureNumerator, lowLiquidityThreshold, token.target, minimumValue);
 
         return {
             sut,
@@ -108,7 +109,7 @@ describe("Liquidity", function () {
             await token.mint(wallets.deployer.address, minimumValue);
             await token.approve(sut.target, minimumValue);
 
-            await expect(sut.deposit(minimumValue - 1n)).to.be.revertedWithCustomError(sut, "ValueHolderValueTooSmall");
+            await expect(sut.deposit(minimumValue - 1n)).to.be.revertedWithCustomError(sut, "ValueBelowMinimum");
         });
 
         it("Should receive the token value", async function () {
@@ -303,7 +304,7 @@ describe("Liquidity", function () {
         it("Should revert if the value is 0", async function () {
             const { sut } = await loadFixture(fixture);
 
-            await expect(sut.withdraw(0)).to.be.revertedWithCustomError(sut, "ValueHolderValueTooSmall");
+            await expect(sut.withdraw(0)).to.be.revertedWithCustomError(sut, "ValueBelowMinimum");
         });
 
         describe("_canChangeLiquidity() == true", function () {
