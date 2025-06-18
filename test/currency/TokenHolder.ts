@@ -119,25 +119,25 @@ describe("TokenHolder", function () {
 
             const [_, alice] = await ethers.getSigners();
 
-            await expect(sut.connect(alice).rescueTokens(otherToken)).to.be.revertedWithCustomError(
+            await expect(sut.connect(alice).rescueTokens(otherToken, alice.address)).to.be.revertedWithCustomError(
                 sut,
                 "OwnableUnauthorizedAccount"
             );
         });
 
         it("Should revert if the token is the primary token", async function () {
-            const { sut, token } = await loadFixture(fixture);
+            const { sut, token, wallet } = await loadFixture(fixture);
 
             const amount = oneEther;
             await token.mint(sut.target, amount);
 
-            await expect(sut.rescueTokens(token.target)).to.be.revertedWithCustomError(sut, "InvalidRescue");
+            await expect(sut.rescueTokens(token.target, wallet.address)).to.be.revertedWithCustomError(sut, "InvalidRescue");
         });
 
         it("Should revert if the balance is 0", async function () {
-            const { sut, otherToken } = await loadFixture(fixture);
+            const { sut, otherToken, wallet } = await loadFixture(fixture);
 
-            await expect(sut.rescueTokens(otherToken.target)).to.be.revertedWithCustomError(sut, "InvalidRescue");
+            await expect(sut.rescueTokens(otherToken.target, wallet.address)).to.be.revertedWithCustomError(sut, "InvalidRescue");
         });
 
         it("Should rescue the balance", async function () {
@@ -149,7 +149,7 @@ describe("TokenHolder", function () {
             const ownerBalanceBefore = await otherToken.balanceOf(wallet.address);
             const sutBalanceBefore = await otherToken.balanceOf(sut.target);
 
-            await sut.rescueTokens(otherToken.target);
+            await sut.rescueTokens(otherToken.target, wallet.address);
 
             expect(await otherToken.balanceOf(sut.target)).to.equal(sutBalanceBefore - amount);
             expect(await otherToken.balanceOf(wallet.address)).to.equal(ownerBalanceBefore + amount);

@@ -69,11 +69,11 @@ abstract contract TokenHolder is Ownable {
 
     /// @notice allows for the rescue of tokens that are not the primary token of this contract.
     /// @param _toRescue The address of the token to rescue.
-    function rescueTokens(IERC20 _toRescue) external onlyOwner {
+    function rescueTokens(IERC20 _toRescue, address _to) external onlyOwner {
         uint256 tokenBalance = _toRescue.balanceOf(address(this));
 
         if (_token == _toRescue || tokenBalance == 0) revert InvalidRescue();
-        SafeERC20.safeTransfer(_toRescue, owner(), tokenBalance);
+        SafeERC20.safeTransfer(_toRescue, _to, tokenBalance);
     }
 
     // #######################################################################################
