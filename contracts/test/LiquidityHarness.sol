@@ -15,8 +15,8 @@ contract LiquidityHarness is Liquidity {
     // #######################################################################################
 
     constructor(
-        uint128 maxExposureNumerator_,
-        uint128 lowLiquidityThreshold_,
+        uint64 maxExposureNumerator_,
+        uint256 lowLiquidityThreshold_,
         address token_,
         uint256 minimumValue_
     ) Liquidity(maxExposureNumerator_, lowLiquidityThreshold_) TokenHolder(token_, minimumValue_) Ownable(msg.sender) {

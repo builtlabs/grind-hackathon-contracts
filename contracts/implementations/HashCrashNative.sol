@@ -12,8 +12,8 @@ contract HashCrashNative is HashCrash, WrappedContext {
         address lootTable_,
         bytes32 genesisHash_,
         address hashProducer_,
-        uint128 maxExposureNumerator_,
-        uint128 lowLiquidityThreshold_,
+        uint64 maxExposureNumerator_,
+        uint256 lowLiquidityThreshold_,
         address owner_,
         address token_,
         uint256 minimumValue_

@@ -6,7 +6,7 @@ import { TokenHolder } from "../currency/TokenHolder.sol";
 /// @title Liquidity
 /// @notice A base contract for managing liquidity.
 abstract contract Liquidity is TokenHolder {
-    uint256 constant _MAX_LIQUIDITY_QUEUE_SIZE = 64;
+    uint64 constant _MAX_LIQUIDITY_QUEUE_SIZE = 64;
     uint256 constant _DENOMINATOR = 10000;
 
     // #######################################################################################
@@ -35,21 +35,21 @@ abstract contract Liquidity is TokenHolder {
     // #######################################################################################
 
     mapping(uint256 => LiquidityDelta) private _liquidityQueue;
-    uint256 private _liquidityQueueLength;
+    uint64 private _liquidityQueueLength;
+    uint64 private _maxExposureNumerator;
+
     uint256 private _availableLiquidity;
+    uint256 private _lowLiquidityThreshold;
 
     mapping(address => User) private _users;
     uint256 private _totalShares;
-
-    uint128 private _maxExposureNumerator;
-    uint128 private _lowLiquidityThreshold;
 
     // #######################################################################################
 
     /// @notice Constructor sets the initial max liquidity exposure to 10% and the low liquidity threshold.
     /// @param maxExposureNumerator_ The numerator for the maximum exposure, must be between 100 and 5000 (1% to 50%).
     /// @param lowLiquidityThreshold_ The threshold below which the parent is notified the _availableLiquidity is low.
-    constructor(uint128 maxExposureNumerator_, uint128 lowLiquidityThreshold_) {
+    constructor(uint64 maxExposureNumerator_, uint256 lowLiquidityThreshold_) {
         _setMaxExposure(maxExposureNumerator_);
         _lowLiquidityThreshold = lowLiquidityThreshold_;
     }
@@ -58,7 +58,7 @@ abstract contract Liquidity is TokenHolder {
 
     /// @notice Sets the maximum exposure numerator.
     /// @param _numerator The numerator for the maximum exposure, must be between 100 and 5000 (1% to 50%).
-    function setMaxExposure(uint128 _numerator) external onlyOwner {
+    function setMaxExposure(uint64 _numerator) external onlyOwner {
         _setMaxExposure(_numerator);
     }
 
@@ -76,12 +76,12 @@ abstract contract Liquidity is TokenHolder {
     }
 
     /// @notice Returns the current maximum exposure numerator.
-    function getMaxExposureNumerator() external view returns (uint128) {
+    function getMaxExposureNumerator() external view returns (uint64) {
         return _maxExposureNumerator;
     }
 
     /// @notice Returns the current low liquidity threshold.
-    function getLowLiquidityThreshold() external view returns (uint128) {
+    function getLowLiquidityThreshold() external view returns (uint256) {
         return _lowLiquidityThreshold;
     }
 
@@ -223,7 +223,7 @@ abstract contract Liquidity is TokenHolder {
 
     // #######################################################################################
 
-    function _setMaxExposure(uint128 _numerator) private {
+    function _setMaxExposure(uint64 _numerator) private {
         if (_numerator < 100 || _numerator > 5000) {
             revert InvalidMaxExposure();
         }
@@ -236,7 +236,7 @@ abstract contract Liquidity is TokenHolder {
         if (_users[msg.sender].lastUpdated == round) revert OneChangePerRound();
         _users[msg.sender].lastUpdated = round;
 
-        uint256 length = _liquidityQueueLength;
+        uint64 length = _liquidityQueueLength;
         if (length == _MAX_LIQUIDITY_QUEUE_SIZE) revert LiquidityQueueFull();
 
         _liquidityQueue[length] = LiquidityDelta(_action, msg.sender, _amount);

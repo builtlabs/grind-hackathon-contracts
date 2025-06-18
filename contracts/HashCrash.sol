@@ -100,8 +100,8 @@ abstract contract HashCrash is Liquidity {
         address lootTable_,
         bytes32 genesisHash_,
         address hashProducer_,
-        uint128 maxExposureNumerator_,
-        uint128 lowLiquidityThreshold_,
+        uint64 maxExposureNumerator_,
+        uint256 lowLiquidityThreshold_,
         address owner_
     ) Liquidity(maxExposureNumerator_, lowLiquidityThreshold_) Ownable(owner_) {
         _introBlocks = 20;
