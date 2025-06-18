@@ -233,7 +233,7 @@ describe("HashCrashNative", function () {
                 value: nativeAmount,
             });
 
-            const shares = await sut.getShares(wallets.deployer.address);
+            const shares = await sut.getUserShares(wallets.deployer.address);
             expect(shares).to.equal(nativeAmount);
         });
 
@@ -248,7 +248,7 @@ describe("HashCrashNative", function () {
 
             await sut.deposit(wethAmount);
 
-            const shares = await sut.getShares(wallets.deployer.address);
+            const shares = await sut.getUserShares(wallets.deployer.address);
             expect(shares).to.equal(wethAmount);
         });
 
@@ -267,7 +267,7 @@ describe("HashCrashNative", function () {
                 value: nativeAmount,
             });
 
-            const shares = await sut.getShares(wallets.deployer.address);
+            const shares = await sut.getUserShares(wallets.deployer.address);
             expect(shares).to.equal(nativeAmount + wethAmount);
         });
     });

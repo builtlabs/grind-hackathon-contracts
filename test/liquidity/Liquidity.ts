@@ -53,6 +53,12 @@ describe("Liquidity", function () {
             expect(await sut.getMinimum()).to.equal(minimumValue);
         });
 
+        it("Should set the liquidity queue nonce", async function () {
+            const { sut } = await loadFixture(fixture);
+
+            expect(await sut.getLiquidityQueueNonce()).to.equal(1n);
+        });
+
         it("Should revert if max exposure is below 100", async function () {
             const { token } = await loadFixture(fixture);
 
@@ -163,7 +169,7 @@ describe("Liquidity", function () {
 
                 await sut.deposit(oneEther);
 
-                expect(await sut.getShares(wallets.deployer.address)).to.equal(oneEther);
+                expect(await sut.getUserShares(wallets.deployer.address)).to.equal(oneEther);
                 expect(await sut.getTotalShares()).to.equal(oneEther);
             });
 
@@ -178,11 +184,11 @@ describe("Liquidity", function () {
                 await sut.deposit(oneEther / 4n);
                 await sut.deposit((oneEther / 4n) * 3n);
 
-                expect(await sut.getShares(wallets.deployer.address)).to.equal(oneEther);
+                expect(await sut.getUserShares(wallets.deployer.address)).to.equal(oneEther);
                 expect(await sut.getTotalShares()).to.equal(oneEther);
             });
 
-            it("Should not update lastUpdated", async function () {
+            it("Should not update the user queue nonce", async function () {
                 const { sut, token, wallets } = await loadFixture(fixture);
 
                 await token.mint(wallets.deployer.address, oneEther);
@@ -190,11 +196,10 @@ describe("Liquidity", function () {
 
                 await sut.mockCanChangeLiquidity(true);
 
-                const round = 2n;
-                await sut.mockRound(round);
+                expect(await sut.getLiquidityQueueNonce()).to.equal(1n);
 
                 await sut.deposit(oneEther);
-                expect(await sut.getLastUpdated(wallets.deployer)).to.equal(0n);
+                expect(await sut.getUserLiquidityQueueNonce(wallets.deployer)).to.equal(0n);
             });
 
             it("Should emit LiquidityAdded", async function () {
@@ -233,14 +238,10 @@ describe("Liquidity", function () {
                 await sut.mockCanChangeLiquidity(false);
                 await sut.setMinimum(amount);
 
-                await token.mint(wallets.deployer.address, amount * _MAX_LIQUIDITY_QUEUE_SIZE);
-                await token.approve(sut.target, amount * _MAX_LIQUIDITY_QUEUE_SIZE);
+                await token.mint(sut.target, amount * _MAX_LIQUIDITY_QUEUE_SIZE);
 
                 // Mock fill the liquidity queue to the maximum size
                 await sut.fillLiquidityQueue(amount, _MAX_LIQUIDITY_QUEUE_SIZE);
-
-                const round = await sut.getMockRound();
-                await sut.mockRound(round + 1n);
 
                 await token.mint(wallets.deployer.address, amount);
                 await token.approve(sut.target, amount);
@@ -268,11 +269,8 @@ describe("Liquidity", function () {
 
                 await sut.mockCanChangeLiquidity(false);
 
-                const round = 2n;
-                await sut.mockRound(round);
-
                 await sut.deposit(oneEther);
-                expect(await sut.getLastUpdated(wallets.deployer)).to.equal(round);
+                expect(await sut.getUserLiquidityQueueNonce(wallets.deployer)).to.equal(1n);
             });
 
             it("Should push the deposit into the liquidity queue", async function () {
@@ -345,10 +343,9 @@ describe("Liquidity", function () {
                 await sut.mockCanChangeLiquidity(true);
 
                 await sut.deposit(oneEther);
-                await sut.mockRound(2n);
                 await sut.withdraw(oneEther);
 
-                expect(await sut.getShares(wallets.deployer.address)).to.equal(0);
+                expect(await sut.getUserShares(wallets.deployer.address)).to.equal(0);
                 expect(await sut.getTotalShares()).to.equal(0);
             });
 
@@ -361,12 +358,10 @@ describe("Liquidity", function () {
                 await token.approve(sut.target, oneEther);
                 await sut.deposit(oneEther);
 
-                const round = 2n;
-                await sut.mockRound(round);
+                expect(await sut.getLiquidityQueueNonce()).to.equal(1n);
 
                 await sut.withdraw(oneEther);
-
-                expect(await sut.getLastUpdated(wallets.deployer)).to.equal(0n);
+                expect(await sut.getUserLiquidityQueueNonce(wallets.deployer)).to.equal(0n);
             });
 
             it("Should set accurate shares for a partial withdraw", async function () {
@@ -378,16 +373,14 @@ describe("Liquidity", function () {
                 await sut.mockCanChangeLiquidity(true);
 
                 await sut.deposit(oneEther);
-                await sut.mockRound(2n);
                 await sut.withdraw(oneEther / 4n);
 
-                expect(await sut.getShares(wallets.deployer.address)).to.equal((oneEther / 4n) * 3n);
+                expect(await sut.getUserShares(wallets.deployer.address)).to.equal((oneEther / 4n) * 3n);
                 expect(await sut.getTotalShares()).to.equal((oneEther / 4n) * 3n);
 
-                await sut.mockRound(3n);
                 await sut.withdraw((oneEther / 4n) * 3n);
 
-                expect(await sut.getShares(wallets.deployer.address)).to.equal(0);
+                expect(await sut.getUserShares(wallets.deployer.address)).to.equal(0);
                 expect(await sut.getTotalShares()).to.equal(0);
             });
 
@@ -400,7 +393,6 @@ describe("Liquidity", function () {
                 await sut.mockCanChangeLiquidity(true);
 
                 await sut.deposit(oneEther);
-                await sut.mockRound(2n);
 
                 await expect(sut.withdraw(oneEther))
                     .to.emit(sut, "LiquidityRemoved")
@@ -416,7 +408,6 @@ describe("Liquidity", function () {
                 await sut.mockCanChangeLiquidity(true);
 
                 await sut.deposit(oneEther);
-                await sut.mockRound(2n);
                 await sut.withdraw(oneEther);
 
                 expect(await sut.getAvailableLiquidity()).to.equal(0n);
@@ -436,18 +427,12 @@ describe("Liquidity", function () {
                 await token.approve(sut.target, amount);
                 await sut.deposit(amount);
 
-                await sut.mockRound(2n);
-
                 await sut.mockCanChangeLiquidity(false);
 
-                await token.mint(wallets.deployer.address, amount * _MAX_LIQUIDITY_QUEUE_SIZE);
-                await token.approve(sut.target, amount * _MAX_LIQUIDITY_QUEUE_SIZE);
+                await token.mint(sut.target, amount * _MAX_LIQUIDITY_QUEUE_SIZE);
 
                 // Mock fill the liquidity queue to the maximum size
                 await sut.fillLiquidityQueue(amount, _MAX_LIQUIDITY_QUEUE_SIZE);
-
-                const round = await sut.getMockRound();
-                await sut.mockRound(round + 1n);
 
                 await expect(sut.withdraw(amount)).to.be.revertedWithCustomError(sut, "LiquidityQueueFull");
             });
@@ -488,12 +473,8 @@ describe("Liquidity", function () {
 
                 await sut.mockCanChangeLiquidity(false);
 
-                const round = 2n;
-                await sut.mockRound(round);
-
                 await sut.withdraw(oneEther);
-
-                expect(await sut.getLastUpdated(wallets.deployer)).to.equal(round);
+                expect(await sut.getUserLiquidityQueueNonce(wallets.deployer)).to.equal(await sut.getLiquidityQueueNonce());
             });
 
             it("Should push the withdraw into the liquidity queue when the user has deposited", async function () {
@@ -505,8 +486,6 @@ describe("Liquidity", function () {
                 await sut.mockCanChangeLiquidity(true);
 
                 await sut.deposit(oneEther);
-
-                await sut.mockRound(2n);
 
                 await sut.mockCanChangeLiquidity(false);
 
@@ -530,7 +509,6 @@ describe("Liquidity", function () {
                 await sut.deposit(oneEther);
 
                 await sut.mockCanChangeLiquidity(false);
-                await sut.mockRound(2n);
 
                 await expect(sut.withdraw(oneEther))
                     .to.emit(sut, "LiquidityChangeQueued")
@@ -556,7 +534,7 @@ describe("Liquidity", function () {
             expect(lq.length).to.equal(0);
 
             expect(await sut.getTotalShares()).to.equal(oneEther);
-            expect(await sut.getShares(wallets.deployer)).to.equal(oneEther);
+            expect(await sut.getUserShares(wallets.deployer)).to.equal(oneEther);
             expect(await token.balanceOf(wallets.deployer.address)).to.equal(0);
             expect(await token.balanceOf(sut.target)).to.equal(oneEther);
         });
@@ -569,7 +547,6 @@ describe("Liquidity", function () {
 
             await sut.mockCanChangeLiquidity(true);
             await sut.deposit(oneEther);
-            await sut.mockRound(2n);
 
             await sut.mockCanChangeLiquidity(false);
             await sut.withdraw(oneEther);
@@ -580,7 +557,7 @@ describe("Liquidity", function () {
             expect(lq.length).to.equal(0);
 
             expect(await sut.getTotalShares()).to.equal(0);
-            expect(await sut.getShares(wallets.deployer)).to.equal(0);
+            expect(await sut.getUserShares(wallets.deployer)).to.equal(0);
 
             expect(await token.balanceOf(wallets.deployer.address)).to.equal(oneEther);
             expect(await token.balanceOf(sut.target)).to.equal(0);
@@ -608,7 +585,7 @@ describe("Liquidity", function () {
             expect(await token.balanceOf(sut.target)).to.equal(oneEther * BigInt(adds.length));
 
             for (const wallet of adds) {
-                expect(await sut.getShares(wallet)).to.equal(oneEther);
+                expect(await sut.getUserShares(wallet)).to.equal(oneEther);
                 expect(await token.balanceOf(wallet.address)).to.equal(0);
             }
         });
@@ -628,7 +605,6 @@ describe("Liquidity", function () {
             }
 
             await sut.mockCanChangeLiquidity(false);
-            await sut.mockRound(2n);
 
             for (const wallet of removes) {
                 await sut.connect(wallet).withdraw(oneEther);
@@ -643,7 +619,7 @@ describe("Liquidity", function () {
             expect(await token.balanceOf(sut.target)).to.equal(0);
 
             for (const wallet of removes) {
-                expect(await sut.getShares(wallet)).to.equal(0);
+                expect(await sut.getUserShares(wallet)).to.equal(0);
                 expect(await token.balanceOf(wallet.address)).to.equal(oneEther);
             }
         });
@@ -665,7 +641,6 @@ describe("Liquidity", function () {
             await sut.connect(wallets.alice).deposit(oneEther);
             await sut.connect(wallets.bob).deposit(oneEther);
             await sut.clearLiquidityQueue();
-            await sut.mockRound(2n);
 
             lq = await sut.getLiquidityQueue();
             expect(lq.length).to.equal(0);
@@ -673,10 +648,10 @@ describe("Liquidity", function () {
             expect(await sut.getTotalShares()).to.equal(oneEther + oneEther);
             expect(await token.balanceOf(sut.target)).to.equal(oneEther + oneEther);
 
-            expect(await sut.getShares(wallets.alice)).to.equal(oneEther);
+            expect(await sut.getUserShares(wallets.alice)).to.equal(oneEther);
             expect(await token.balanceOf(wallets.alice.address)).to.equal(0);
 
-            expect(await sut.getShares(wallets.bob)).to.equal(oneEther);
+            expect(await sut.getUserShares(wallets.bob)).to.equal(oneEther);
             expect(await token.balanceOf(wallets.bob.address)).to.equal(0);
 
             // ----------------------------------------------------------------------
@@ -684,7 +659,6 @@ describe("Liquidity", function () {
             await sut.connect(wallets.bob).withdraw(oneEther);
             await sut.connect(wallets.charlie).deposit(oneEther);
             await sut.clearLiquidityQueue();
-            await sut.mockRound(3n);
 
             lq = await sut.getLiquidityQueue();
             expect(lq.length).to.equal(0);
@@ -692,13 +666,13 @@ describe("Liquidity", function () {
             expect(await sut.getTotalShares()).to.equal(oneEther + oneEther);
             expect(await token.balanceOf(sut.target)).to.equal(oneEther + oneEther);
 
-            expect(await sut.getShares(wallets.alice)).to.equal(oneEther);
+            expect(await sut.getUserShares(wallets.alice)).to.equal(oneEther);
             expect(await token.balanceOf(wallets.alice.address)).to.equal(0);
 
-            expect(await sut.getShares(wallets.bob)).to.equal(0);
+            expect(await sut.getUserShares(wallets.bob)).to.equal(0);
             expect(await token.balanceOf(wallets.bob.address)).to.equal(oneEther);
 
-            expect(await sut.getShares(wallets.charlie)).to.equal(oneEther);
+            expect(await sut.getUserShares(wallets.charlie)).to.equal(oneEther);
             expect(await token.balanceOf(wallets.charlie.address)).to.equal(0);
 
             // ----------------------------------------------------------------------
@@ -706,7 +680,6 @@ describe("Liquidity", function () {
             await sut.connect(wallets.alice).withdraw(oneEther);
             await sut.connect(wallets.charlie).withdraw(oneEther);
             await sut.clearLiquidityQueue();
-            await sut.mockRound(4n);
 
             lq = await sut.getLiquidityQueue();
             expect(lq.length).to.equal(0);
@@ -714,13 +687,13 @@ describe("Liquidity", function () {
             expect(await sut.getTotalShares()).to.equal(0);
             expect(await token.balanceOf(sut.target)).to.equal(0);
 
-            expect(await sut.getShares(wallets.alice)).to.equal(0);
+            expect(await sut.getUserShares(wallets.alice)).to.equal(0);
             expect(await token.balanceOf(wallets.alice.address)).to.equal(oneEther);
 
-            expect(await sut.getShares(wallets.bob)).to.equal(0);
+            expect(await sut.getUserShares(wallets.bob)).to.equal(0);
             expect(await token.balanceOf(wallets.bob.address)).to.equal(oneEther);
 
-            expect(await sut.getShares(wallets.charlie)).to.equal(0);
+            expect(await sut.getUserShares(wallets.charlie)).to.equal(0);
             expect(await token.balanceOf(wallets.charlie.address)).to.equal(oneEther);
         });
 
@@ -766,7 +739,6 @@ describe("Liquidity", function () {
                         await sut.connect(item.wallet).withdraw(item.amount);
                     }
                 }
-                await sut.mockRound(nextRound++);
                 await sut.clearLiquidityQueue();
             }
 
@@ -777,7 +749,7 @@ describe("Liquidity", function () {
             expect(await token.balanceOf(sut.target)).to.equal(0);
 
             for (const wallet of users) {
-                expect(await sut.getShares(wallet)).to.equal(0);
+                expect(await sut.getUserShares(wallet)).to.equal(0);
                 expect(await token.balanceOf(wallet.address)).to.equal(initialBalance);
             }
         });
@@ -809,7 +781,6 @@ describe("Liquidity", function () {
             }
 
             await sut.clearLiquidityQueue();
-            await sut.mockRound(2n);
 
             expect(await sut.getTotalShares()).to.equal(10n * oneEther);
             expect(await token.balanceOf(sut.target)).to.equal(10n * oneEther);
@@ -818,7 +789,7 @@ describe("Liquidity", function () {
             await token.mint(sut.target, initialBalance); // 100 extra tokens, for 10 shares
 
             for (const remove of removes) {
-                await sut.connect(remove.wallet).withdraw(await sut.getShares(remove.wallet.address));
+                await sut.connect(remove.wallet).withdraw(await sut.getUserShares(remove.wallet.address));
             }
 
             await sut.clearLiquidityQueue();
@@ -830,7 +801,7 @@ describe("Liquidity", function () {
             expect(await token.balanceOf(sut.target)).to.equal(0);
 
             for (const remove of removes) {
-                expect(await sut.getShares(remove.wallet)).to.equal(0);
+                expect(await sut.getUserShares(remove.wallet)).to.equal(0);
                 expect(await token.balanceOf(remove.wallet.address)).to.equal(
                     initialBalance + share * remove.multiplier
                 );
@@ -863,7 +834,6 @@ describe("Liquidity", function () {
             }
 
             await sut.clearLiquidityQueue();
-            await sut.mockRound(2n);
 
             expect(await sut.getTotalShares()).to.equal(10n * oneEther);
             expect(await token.balanceOf(sut.target)).to.equal(10n * oneEther);
@@ -871,7 +841,7 @@ describe("Liquidity", function () {
             await sut.mockLoss(5n * oneEther); // Half the tokens
 
             for (const remove of removes) {
-                await sut.connect(remove.wallet).withdraw(await sut.getShares(remove.wallet.address));
+                await sut.connect(remove.wallet).withdraw(await sut.getUserShares(remove.wallet.address));
             }
 
             await sut.clearLiquidityQueue();
@@ -883,9 +853,54 @@ describe("Liquidity", function () {
             expect(await token.balanceOf(sut.target)).to.equal(0);
 
             for (const remove of removes) {
-                expect(await sut.getShares(remove.wallet)).to.equal(0);
+                expect(await sut.getUserShares(remove.wallet)).to.equal(0);
                 expect(await token.balanceOf(remove.wallet.address)).to.equal(initialBalance - remove.amount);
             }
+        });
+
+        it("Should reset round liquidity", async function () {
+            const { sut, token, wallets } = await loadFixture(fixture);
+
+            await token.mint(wallets.deployer.address, oneEther);
+            await token.approve(sut.target, oneEther);
+
+            await sut.mockCanChangeLiquidity(false);
+
+            await sut.deposit(oneEther);
+            await sut.clearLiquidityQueue();
+
+            expect(await sut.getAvailableLiquidity()).to.equal(oneEther / 10n);
+        });
+
+        it("Should reset the liquidity queue length", async function () {
+            const { sut, token, wallets } = await loadFixture(fixture);
+
+            await token.mint(wallets.deployer.address, oneEther);
+            await token.approve(sut.target, oneEther);
+
+            await sut.mockCanChangeLiquidity(false);
+
+            await sut.deposit(oneEther);
+            await sut.clearLiquidityQueue();
+
+            expect(await sut.getLiquidityQueueLength()).to.equal(0n);
+        });
+
+        it("Should increment the liquidity queue nonce", async function () {
+            const { sut, token, wallets } = await loadFixture(fixture);
+
+            await token.mint(wallets.deployer.address, oneEther);
+            await token.approve(sut.target, oneEther);
+
+            await sut.mockCanChangeLiquidity(false);
+
+            await sut.deposit(oneEther);
+
+            const previousNonce = await sut.getLiquidityQueueNonce();
+
+            await sut.clearLiquidityQueue();
+
+            expect(await sut.getLiquidityQueueNonce()).to.equal(previousNonce + 1n);
         });
     });
 

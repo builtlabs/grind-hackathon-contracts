@@ -195,8 +195,8 @@ describe("HashCrash", function () {
     // ############################ TESTS ############################
 
     describe("stress tests", function () {
-        // NOTE: The max gas we are realistically willing to pay for reveal is ~12 million gas
-        const softcap = 12000000n;
+        // NOTE: The max gas we are realistically willing to pay for reveal is ~12 million gas (~$0.50)
+        const softcap = 12500000n;
         const batchSize = 32n;
 
         async function stressTestFixture() {

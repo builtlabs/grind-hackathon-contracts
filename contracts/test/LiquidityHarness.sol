@@ -4,13 +4,14 @@ pragma solidity ^0.8.24;
 import { Liquidity } from "../liquidity/Liquidity.sol";
 import { TokenHolder } from "../currency/TokenHolder.sol";
 
+import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
 
 contract LiquidityHarness is Liquidity {
     event OnLowLiquidity();
 
     bool public canChangeLiquidity;
-    uint64 public round;
+    IERC20 private _token;
 
     // #######################################################################################
 
@@ -20,7 +21,7 @@ contract LiquidityHarness is Liquidity {
         address token_,
         uint256 minimumValue_
     ) Liquidity(maxExposureNumerator_, lowLiquidityThreshold_) TokenHolder(token_, minimumValue_) Ownable(msg.sender) {
-        round = 1;
+        _token = IERC20(token_);
     }
 
     // #######################################################################################
@@ -30,32 +31,12 @@ contract LiquidityHarness is Liquidity {
         canChangeLiquidity = false;
 
         for (uint256 i = 0; i < _queueLength; i++) {
-            (bool success, bytes memory data) = address(this).delegatecall(
-                abi.encodeWithSignature("deposit(uint256)", _amount, i)
-            );
-
-            if (!success) {
-                if (data.length > 0) {
-                    assembly {
-                        revert(add(data, 32), mload(data))
-                    }
-                } else {
-                    revert("Bet failed with no reason");
-                }
-            }
-
-            round++;
+            UniqueLiquidityDepositor depositor = new UniqueLiquidityDepositor();
+            _sendValue(address(depositor), _amount);
+            depositor.deposit(this, _token, _amount);
         }
 
         canChangeLiquidity = prev;
-    }
-
-    function getMockRound() external view returns (uint64) {
-        return round;
-    }
-
-    function mockRound(uint64 _round) external {
-        round = _round;
     }
 
     function mockLoss(uint256 _amount) external {
@@ -84,12 +65,15 @@ contract LiquidityHarness is Liquidity {
         return canChangeLiquidity;
     }
 
-    function _getRound() internal view override returns (uint64) {
-        return round;
-    }
-
     function _onLowLiquidity() internal override {
         emit OnLowLiquidity();
         super._onLowLiquidity();
+    }
+}
+
+contract UniqueLiquidityDepositor {
+    function deposit(Liquidity _target, IERC20 _token, uint256 _amount) external {
+        _token.approve(address(_target), _amount);
+        _target.deposit(_amount);
     }
 }

@@ -202,7 +202,7 @@ describe("HashCrashERC20", function () {
 
             await sut.deposit(minimumValue);
 
-            const shares = await sut.getShares(wallets.deployer.address);
+            const shares = await sut.getUserShares(wallets.deployer.address);
             expect(shares).to.equal(minimumValue);
         });
     })

@@ -29,13 +29,14 @@ abstract contract Liquidity is TokenHolder {
 
     struct User {
         uint192 shares;
-        uint64 lastUpdated;
+        uint64 queueNonce;
     }
 
     // #######################################################################################
 
     mapping(uint256 => LiquidityDelta) private _liquidityQueue;
     uint64 private _liquidityQueueLength;
+    uint64 private _liquidityQueueNonce;
     uint64 private _maxExposureNumerator;
 
     uint256 private _availableLiquidity;
@@ -52,6 +53,8 @@ abstract contract Liquidity is TokenHolder {
     constructor(uint64 maxExposureNumerator_, uint256 lowLiquidityThreshold_) {
         _setMaxExposure(maxExposureNumerator_);
         _lowLiquidityThreshold = lowLiquidityThreshold_;
+
+        _liquidityQueueNonce = 1; // Start at 1 to avoid conflicts with the initial user queue nonce.
     }
 
     // #######################################################################################
@@ -85,19 +88,29 @@ abstract contract Liquidity is TokenHolder {
         return _lowLiquidityThreshold;
     }
 
-    /// @notice Returns the number of shares held by the given user.
-    function getShares(address _user) external view returns (uint256) {
-        return _users[_user].shares;
-    }
-
-    /// @notice Returns the last deposit round of the given user.
-    function getLastUpdated(address _user) external view returns (uint64) {
-        return _users[_user].lastUpdated;
-    }
-
     /// @notice Returns the total number of shares across all users.
     function getTotalShares() external view returns (uint256) {
         return _totalShares;
+    }
+
+    /// @notice Returns the number of shares held by the given user.
+    function getUserShares(address _user) external view returns (uint256) {
+        return _users[_user].shares;
+    }
+
+    /// @notice Returns the liquidity queue nonce of the given user.
+    function getUserLiquidityQueueNonce(address _user) external view returns (uint64) {
+        return _users[_user].queueNonce;
+    }
+
+    /// @notice Returns the current liquidity queue nonce.
+    function getLiquidityQueueNonce() external view returns (uint64) {
+        return _liquidityQueueNonce;
+    }
+
+    /// @notice Returns the current length of the liquidity queue.
+    function getLiquidityQueueLength() external view returns (uint64) {
+        return _liquidityQueueLength;
     }
 
     /// @notice Returns the current liquidity changes waiting to be applied.
@@ -185,6 +198,10 @@ abstract contract Liquidity is TokenHolder {
         }
 
         _resetLiquidity();
+
+        unchecked {
+            _liquidityQueueNonce++;
+        }
     }
 
     function _useRoundLiquidity(uint256 _amount) internal {
@@ -214,8 +231,6 @@ abstract contract Liquidity is TokenHolder {
 
     function _canChangeLiquidity() internal view virtual returns (bool);
 
-    function _getRound() internal view virtual returns (uint64);
-
     function _onLowLiquidity() internal virtual {
         // This function can be overridden by the parent contract to handle low liquidity situations.
         // For example, it could start the game early.
@@ -232,9 +247,9 @@ abstract contract Liquidity is TokenHolder {
     }
 
     function _queueLiquidityChange(uint8 _action, uint256 _amount) private {
-        uint64 round = _getRound();
-        if (_users[msg.sender].lastUpdated == round) revert OneChangePerRound();
-        _users[msg.sender].lastUpdated = round;
+        uint64 nonce = _liquidityQueueNonce;
+        if (_users[msg.sender].queueNonce == nonce) revert OneChangePerRound();
+        _users[msg.sender].queueNonce = nonce;
 
         uint64 length = _liquidityQueueLength;
         if (length == _MAX_LIQUIDITY_QUEUE_SIZE) revert LiquidityQueueFull();
