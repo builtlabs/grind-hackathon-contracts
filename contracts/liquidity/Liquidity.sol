@@ -17,7 +17,6 @@ abstract contract Liquidity is TokenHolder {
 
     error OneChangePerRound();
     error LiquidityQueueFull();
-    error InvalidMaxExposure();
     error InsufficientShares();
     error InsufficientLiquidity();
 
@@ -240,7 +239,7 @@ abstract contract Liquidity is TokenHolder {
 
     function _setMaxExposure(uint64 _numerator) private {
         if (_numerator < 100 || _numerator > 5000) {
-            revert InvalidMaxExposure();
+            revert InvalidValue(_numerator);
         }
 
         _maxExposureNumerator = _numerator;

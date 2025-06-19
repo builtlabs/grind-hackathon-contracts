@@ -64,9 +64,9 @@ describe("Liquidity", function () {
 
             const SUT = await ethers.getContractFactory("LiquidityHarness");
 
-            await expect(
-                SUT.deploy(99, lowLiquidityThreshold, token.target, minimumValue)
-            ).to.be.revertedWithCustomError(SUT, "InvalidMaxExposure");
+            await expect(SUT.deploy(99, lowLiquidityThreshold, token.target, minimumValue))
+                .to.be.revertedWithCustomError(SUT, "InvalidValue")
+                .withArgs(99);
         });
 
         it("Should revert if max exposure is above 5000", async function () {
@@ -74,9 +74,9 @@ describe("Liquidity", function () {
 
             const SUT = await ethers.getContractFactory("LiquidityHarness");
 
-            await expect(
-                SUT.deploy(5001, lowLiquidityThreshold, token.target, minimumValue)
-            ).to.be.revertedWithCustomError(SUT, "InvalidMaxExposure");
+            await expect(SUT.deploy(5001, lowLiquidityThreshold, token.target, minimumValue))
+                .to.be.revertedWithCustomError(SUT, "InvalidValue")
+                .withArgs(5001);
         });
     });
 
@@ -92,13 +92,13 @@ describe("Liquidity", function () {
         it("Should revert if the numerator is less than 100 (1%)", async function () {
             const { sut } = await loadFixture(fixture);
 
-            await expect(sut.setMaxExposure(99)).to.be.revertedWithCustomError(sut, "InvalidMaxExposure");
+            await expect(sut.setMaxExposure(99)).to.be.revertedWithCustomError(sut, "InvalidValue").withArgs(99);
         });
 
         it("Should revert if the numerator is greater than 5000 (50%)", async function () {
             const { sut } = await loadFixture(fixture);
 
-            await expect(sut.setMaxExposure(5001)).to.be.revertedWithCustomError(sut, "InvalidMaxExposure");
+            await expect(sut.setMaxExposure(5001)).to.be.revertedWithCustomError(sut, "InvalidValue").withArgs(5001);
         });
 
         it("Should set the numerator to the new value", async function () {
@@ -135,7 +135,9 @@ describe("Liquidity", function () {
             await token.mint(wallets.deployer.address, minimumValue);
             await token.approve(sut.target, minimumValue);
 
-            await expect(sut.deposit(minimumValue - 1n)).to.be.revertedWithCustomError(sut, "ValueBelowMinimum");
+            await expect(sut.deposit(minimumValue - 1n))
+                .to.be.revertedWithCustomError(sut, "ValueBelowMinimum")
+                .withArgs(minimumValue - 1n);
         });
 
         it("Should receive the token value", async function () {
@@ -322,7 +324,9 @@ describe("Liquidity", function () {
         it("Should revert if the value is below the minimum", async function () {
             const { sut } = await loadFixture(fixture);
 
-            await expect(sut.withdraw(minimumValue - 1n)).to.be.revertedWithCustomError(sut, "ValueBelowMinimum");
+            await expect(sut.withdraw(minimumValue - 1n))
+                .to.be.revertedWithCustomError(sut, "ValueBelowMinimum")
+                .withArgs(minimumValue - 1n);
         });
 
         describe("_canChangeLiquidity() == true", function () {
@@ -474,7 +478,9 @@ describe("Liquidity", function () {
                 await sut.mockCanChangeLiquidity(false);
 
                 await sut.withdraw(oneEther);
-                expect(await sut.getUserLiquidityQueueNonce(wallets.deployer)).to.equal(await sut.getLiquidityQueueNonce());
+                expect(await sut.getUserLiquidityQueueNonce(wallets.deployer)).to.equal(
+                    await sut.getLiquidityQueueNonce()
+                );
             });
 
             it("Should push the withdraw into the liquidity queue when the user has deposited", async function () {

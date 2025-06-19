@@ -161,7 +161,7 @@ describe("PlatformInterface", function () {
         it("Should revert if the season has not been started", async function () {
             const { sut } = await loadFixture(fixture);
 
-            await expect(sut.endSeason()).to.be.revertedWithCustomError(sut, "NotCurrentSeasonError");
+            await expect(sut.endSeason()).to.be.revertedWithCustomError(sut, "SeasonNotStarted");
         });
 
         it("Should revert if the season has already ended", async function () {
@@ -171,7 +171,7 @@ describe("PlatformInterface", function () {
             await sut.startSeason(gamemodes);
             await sut.endSeason();
 
-            await expect(sut.endSeason()).to.be.revertedWithCustomError(sut, "NotCurrentSeasonError");
+            await expect(sut.endSeason()).to.be.revertedWithCustomError(sut, "SeasonNotStarted");
         });
 
         it("Should emit SeasonEnded", async function () {
@@ -249,27 +249,25 @@ describe("PlatformInterface", function () {
         it("Should revert if the referrer is the zero address", async function () {
             const { sut, wallets } = await loadFixture(fixture);
 
-            await expect(sut.connect(wallets.deployer).setReferredBy(ethers.ZeroAddress)).to.be.revertedWithCustomError(
-                sut,
-                "InvalidAddressError"
-            );
+            await expect(sut.connect(wallets.deployer).setReferredBy(ethers.ZeroAddress))
+                .to.be.revertedWithCustomError(sut, "InvalidAddress")
+                .withArgs(ethers.ZeroAddress);
         });
 
         it("Should revert if the referrer is yourself", async function () {
             const { sut, wallets } = await loadFixture(fixture);
 
-            await expect(
-                sut.connect(wallets.deployer).setReferredBy(wallets.deployer.address)
-            ).to.be.revertedWithCustomError(sut, "InvalidAddressError");
+            await expect(sut.connect(wallets.deployer).setReferredBy(wallets.deployer.address))
+                .to.be.revertedWithCustomError(sut, "InvalidAddress")
+                .withArgs(wallets.deployer.address);
         });
 
         it("Should revert if its cyclical", async function () {
             const { sut, wallets } = await loadFixture(fixture);
 
-            await expect(sut.connect(wallets.a).setReferredBy(wallets.d.address)).to.be.revertedWithCustomError(
-                sut,
-                "InvalidAddressError"
-            );
+            await expect(sut.connect(wallets.a).setReferredBy(wallets.d.address))
+                .to.be.revertedWithCustomError(sut, "InvalidAddress")
+                .withArgs(wallets.d.address);
         });
 
         it("Should revert if the caller was already referred", async function () {
@@ -277,7 +275,7 @@ describe("PlatformInterface", function () {
 
             await expect(sut.connect(wallets.b).setReferredBy(wallets.a.address)).to.be.revertedWithCustomError(
                 sut,
-                "AlreadyReferredError"
+                "AlreadyReferred"
             );
         });
 
@@ -393,7 +391,9 @@ describe("PlatformInterface", function () {
         it("Should revert if the total value is zero", async function () {
             const { sut, token } = await loadFixture(fixture);
 
-            await expect(sut.receiveFee(token.target, 0n)).to.be.revertedWithCustomError(sut, "InvalidValueError");
+            await expect(sut.receiveFee(token.target, 0n))
+                .to.be.revertedWithCustomError(sut, "InvalidValue")
+                .withArgs(0n);
         });
 
         it("Should revert if the token is not weth but there is a msg.value", async function () {
@@ -403,7 +403,9 @@ describe("PlatformInterface", function () {
                 sut.receiveFee(token.target, 0n, {
                     value: oneEther,
                 })
-            ).to.be.revertedWithCustomError(sut, "InvalidAddressError");
+            )
+                .to.be.revertedWithCustomError(sut, "InvalidAddress")
+                .withArgs(token.target);
         });
 
         it("Should revert if the reward rates aggregate above 100%", async function () {
@@ -530,6 +532,7 @@ describe("PlatformInterface", function () {
 
             const source = wallets.f;
 
+            await sut.connect(wallets.deployer).setReferralReward(1, 0n); // 0%
             await sut.connect(wallets.deployer).setReferralReward(0, 10000n); // 100%
 
             await token.mint(source.address, oneEther);

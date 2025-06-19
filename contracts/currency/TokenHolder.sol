@@ -18,11 +18,11 @@ abstract contract TokenHolder is Ownable {
     event StagedBalanceIncreased(uint256 amount);
     event StagedBalanceDecreased(uint256 amount);
 
-    error InvalidRescue();
-    error ValueBelowMinimum();
-    error NativeRescueFailed();
-    error InsufficientStagedBalance();
-    error InsufficientAvailableBalance();
+    error InvalidValue(uint256 value);
+    error InvalidAddress(address addr);
+    error ValueBelowMinimum(uint256 value);
+    error InsufficientStagedBalance(uint256 have, uint256 need);
+    error InsufficientAvailableBalance(uint256 have, uint256 need);
 
     // #######################################################################################
 
@@ -72,7 +72,7 @@ abstract contract TokenHolder is Ownable {
     function rescueTokens(IERC20 _toRescue, address _to) external onlyOwner {
         uint256 tokenBalance = _toRescue.balanceOf(address(this));
 
-        if (_token == _toRescue || tokenBalance == 0) revert InvalidRescue();
+        if (_token == _toRescue || tokenBalance == 0) revert InvalidAddress(address(_toRescue));
         SafeERC20.safeTransfer(_toRescue, _to, tokenBalance);
     }
 
@@ -87,19 +87,20 @@ abstract contract TokenHolder is Ownable {
     }
 
     function _unstageAmount(uint256 _amount) internal {
-        if (_stagedBalance < _amount) {
-            revert InsufficientStagedBalance();
+        uint256 staged = _stagedBalance;
+        if (staged < _amount) {
+            revert InsufficientStagedBalance(staged, _amount);
         }
 
         unchecked {
-            _stagedBalance -= _amount;
+            _stagedBalance = staged - _amount;
         }
 
         emit StagedBalanceDecreased(_amount);
     }
 
     function _setMinimum(uint256 _minimumValue) internal {
-        if (_minimumValue == 0) revert ValueBelowMinimum();
+        if (_minimumValue == 0) revert InvalidValue(_minimumValue);
         _minimum = _minimumValue;
     }
 
@@ -108,7 +109,7 @@ abstract contract TokenHolder is Ownable {
     }
 
     function _ensureMinimum(uint256 _value) internal view {
-        if (_value < _getMinimum()) revert ValueBelowMinimum();
+        if (_value < _getMinimum()) revert ValueBelowMinimum(_value);
     }
 
     function _getAvailableBalance() internal view returns (uint256) {
@@ -120,8 +121,9 @@ abstract contract TokenHolder is Ownable {
     }
 
     function _sendValue(address _to, uint256 _value) internal {
-        if (_getAvailableBalance() < _value) {
-            revert InsufficientAvailableBalance();
+        uint256 available = _getAvailableBalance();
+        if (available < _value) {
+            revert InsufficientAvailableBalance(available, _value);
         }
 
         SafeERC20.safeTransfer(_token, _to, _value);

@@ -4,7 +4,7 @@ pragma solidity ^0.8.24;
 /// @title ILootTable
 /// @notice An interface defining a loot table for a probability based game.
 interface ILootTable {
-    error InvalidIndexError();
+    error InvalidIndex();
 
     /// @notice Returns the length of the loot table.
     function getLength() external pure returns (uint256);

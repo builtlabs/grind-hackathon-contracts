@@ -50,7 +50,7 @@ describe("TokenHolder", function () {
 
             const SUT = await ethers.getContractFactory("TokenHolderHarness");
 
-            await expect(SUT.deploy(token.target, 0n)).to.be.revertedWithCustomError(SUT, "ValueBelowMinimum");
+            await expect(SUT.deploy(token.target, 0n)).to.be.revertedWithCustomError(SUT, "InvalidValue").withArgs(0n);
         });
     });
 
@@ -58,10 +58,9 @@ describe("TokenHolder", function () {
         it("Should revert if the value is less than the minimum", async function () {
             const { sut } = await loadFixture(fixture);
 
-            await expect(sut.t_enforceMinimum(minimumValue - 1n)).to.be.revertedWithCustomError(
-                sut,
-                "ValueBelowMinimum"
-            );
+            await expect(sut.t_enforceMinimum(minimumValue - 1n))
+                .to.be.revertedWithCustomError(sut, "ValueBelowMinimum")
+                .withArgs(minimumValue - 1n);
         });
 
         it("Should NOT revert if the value is the minimum", async function () {
@@ -100,7 +99,7 @@ describe("TokenHolder", function () {
         it("Should revert if the value is 0", async function () {
             const { sut } = await loadFixture(fixture);
 
-            await expect(sut.setMinimum(0n)).to.be.revertedWithCustomError(sut, "ValueBelowMinimum");
+            await expect(sut.setMinimum(0n)).to.be.revertedWithCustomError(sut, "InvalidValue").withArgs(0n);
         });
 
         it("Should set the minimum", async function () {
@@ -131,13 +130,17 @@ describe("TokenHolder", function () {
             const amount = oneEther;
             await token.mint(sut.target, amount);
 
-            await expect(sut.rescueTokens(token.target, wallet.address)).to.be.revertedWithCustomError(sut, "InvalidRescue");
+            await expect(sut.rescueTokens(token.target, wallet.address))
+                .to.be.revertedWithCustomError(sut, "InvalidAddress")
+                .withArgs(token.target);
         });
 
         it("Should revert if the balance is 0", async function () {
             const { sut, otherToken, wallet } = await loadFixture(fixture);
 
-            await expect(sut.rescueTokens(otherToken.target, wallet.address)).to.be.revertedWithCustomError(sut, "InvalidRescue");
+            await expect(sut.rescueTokens(otherToken.target, wallet.address))
+                .to.be.revertedWithCustomError(sut, "InvalidAddress")
+                .withArgs(otherToken.target);
         });
 
         it("Should rescue the balance", async function () {

@@ -623,7 +623,7 @@ describe("HashCrash", function () {
         it("Should revert if the bet does not exist", async function () {
             const { sut } = await loadFixture(baseFixture);
 
-            await expect(sut.getBet(0n)).to.be.revertedWithCustomError(sut, "BetNotFoundError");
+            await expect(sut.getBet(0n)).to.be.revertedWithCustomError(sut, "BetNotFound");
         });
 
         it("Should return the bet", async function () {
@@ -1054,10 +1054,9 @@ describe("HashCrash", function () {
         it("Should revert if the value is greater than 10000", async function () {
             const { sut } = await loadFixture(baseFixture);
 
-            await expect(sut.setCancelReturnNumerator(10001)).to.be.revertedWithCustomError(
-                sut,
-                "InvalidCancelReturnNumeratorError"
-            );
+            await expect(sut.setCancelReturnNumerator(10001))
+                .to.be.revertedWithCustomError(sut, "InvalidValue")
+                .withArgs(10001);
         });
 
         it("Should set the cancel return numerator", async function () {
@@ -1117,12 +1116,20 @@ describe("HashCrash", function () {
             );
         });
 
-        it("Should set the loot table address", async function () {
+        it("Should revert if the address is zero", async function () {
             const { sut } = await loadFixture(baseFixture);
 
-            await sut.setLootTable(ethers.ZeroAddress);
+            await expect(sut.setLootTable(ethers.ZeroAddress))
+                .to.be.revertedWithCustomError(sut, "InvalidAddress")
+                .withArgs(ethers.ZeroAddress);
+        });
 
-            expect(await sut.getLootTable()).to.equal(ethers.ZeroAddress);
+        it("Should set the loot table address", async function () {
+            const { sut, wallets } = await loadFixture(baseFixture);
+
+            await sut.setLootTable(wallets.alice.address);
+
+            expect(await sut.getLootTable()).to.equal(wallets.alice.address);
         });
 
         it("Should stage the loot table when not idle", async function () {
@@ -1141,7 +1148,9 @@ describe("HashCrash", function () {
         it("Should revert if the amount is below the minimum", async function () {
             const { sut } = await loadFixture(liquidFixture);
 
-            await expect(sut.placeBet(minimumValue - 1n, 10)).to.be.revertedWithCustomError(sut, "ValueBelowMinimum");
+            await expect(sut.placeBet(minimumValue - 1n, 10))
+                .to.be.revertedWithCustomError(sut, "ValueBelowMinimum")
+                .withArgs(minimumValue - 1n);
         });
 
         describe("_initialiseRound", function () {
@@ -1150,7 +1159,7 @@ describe("HashCrash", function () {
 
                 await sut.setActive(false);
 
-                await expect(sut.placeBet(oneEther, 10)).to.be.revertedWithCustomError(sut, "NotActiveError");
+                await expect(sut.placeBet(oneEther, 10)).to.be.revertedWithCustomError(sut, "NotActive");
             });
 
             describe("has staged loot table", function () {
@@ -1247,7 +1256,7 @@ describe("HashCrash", function () {
                 remaining -= bets;
             }
 
-            await expect(sut.placeBet(oneEther, 10)).to.be.revertedWithCustomError(sut, "RoundFullError");
+            await expect(sut.placeBet(oneEther, 10)).to.be.revertedWithCustomError(sut, "RoundIsFull");
         });
 
         it("Should revert if the round has already started", async function () {
@@ -1257,7 +1266,7 @@ describe("HashCrash", function () {
 
             await mine(config.introBlocks);
 
-            await expect(sut.placeBet(oneEther, 10)).to.be.revertedWithCustomError(sut, "RoundInProgressError");
+            await expect(sut.placeBet(oneEther, 10)).to.be.revertedWithCustomError(sut, "RoundInProgress");
         });
 
         it("Should revert if the cashout index is outside of the loot table", async function () {
@@ -1265,10 +1274,9 @@ describe("HashCrash", function () {
 
             const length = await lootTable.getLength();
 
-            await expect(sut.placeBet(oneEther, length + 1n)).to.be.revertedWithCustomError(
-                sut,
-                "InvalidCashoutIndexError"
-            );
+            await expect(sut.placeBet(oneEther, length + 1n))
+                .to.be.revertedWithCustomError(sut, "InvalidValue")
+                .withArgs(length + 1n);
         });
 
         it("Should escrow the value", async function () {
@@ -1342,7 +1350,7 @@ describe("HashCrash", function () {
         it("Should revert if the index is out of range", async function () {
             const { sut, config } = await loadFixture(betFixture);
 
-            await expect(sut.updateBet(config.bets.length, 10)).to.be.revertedWithCustomError(sut, "BetNotFoundError");
+            await expect(sut.updateBet(config.bets.length, 10)).to.be.revertedWithCustomError(sut, "BetNotFound");
         });
 
         it("Should revert if the caller does not own the bet", async function () {
@@ -1350,7 +1358,7 @@ describe("HashCrash", function () {
 
             await expect(sut.connect(wallets.charlie).updateBet(0, 10)).to.be.revertedWithCustomError(
                 sut,
-                "BetNotYoursError"
+                "BetNotYours"
             );
         });
 
@@ -1359,7 +1367,7 @@ describe("HashCrash", function () {
 
             await sut.cancelBet(0);
 
-            await expect(sut.updateBet(0, 10)).to.be.revertedWithCustomError(sut, "BetCancelledError");
+            await expect(sut.updateBet(0, 10)).to.be.revertedWithCustomError(sut, "BetIsCancelled");
         });
 
         it("Should revert if the round is in progress", async function () {
@@ -1367,16 +1375,16 @@ describe("HashCrash", function () {
 
             await mine(config.introBlocks);
 
-            await expect(sut.updateBet(0, 10)).to.be.revertedWithCustomError(sut, "RoundInProgressError");
+            await expect(sut.updateBet(0, 10)).to.be.revertedWithCustomError(sut, "RoundInProgress");
         });
 
         it("Should revert if the cashout index is out of range", async function () {
             const { sut, lootTable } = await loadFixture(betFixture);
 
-            await expect(sut.updateBet(0, (await lootTable.getLength()) + 1n)).to.be.revertedWithCustomError(
-                sut,
-                "InvalidCashoutIndexError"
-            );
+            const length = await lootTable.getLength();
+            await expect(sut.updateBet(0, length + 1n))
+                .to.be.revertedWithCustomError(sut, "InvalidValue")
+                .withArgs(length + 1n);
         });
 
         it("Should use the correct amount of round liquidity", async function () {
@@ -1432,16 +1440,13 @@ describe("HashCrash", function () {
         it("Should revert if the index is out of range", async function () {
             const { sut, config } = await loadFixture(betFixture);
 
-            await expect(sut.cancelBet(config.bets.length)).to.be.revertedWithCustomError(sut, "BetNotFoundError");
+            await expect(sut.cancelBet(config.bets.length)).to.be.revertedWithCustomError(sut, "BetNotFound");
         });
 
         it("Should revert if the caller does not own the bet", async function () {
             const { sut, wallets } = await loadFixture(betFixture);
 
-            await expect(sut.connect(wallets.charlie).cancelBet(0)).to.be.revertedWithCustomError(
-                sut,
-                "BetNotYoursError"
-            );
+            await expect(sut.connect(wallets.charlie).cancelBet(0)).to.be.revertedWithCustomError(sut, "BetNotYours");
         });
 
         it("Should revert if the bet is cancelled", async function () {
@@ -1449,7 +1454,7 @@ describe("HashCrash", function () {
 
             await sut.cancelBet(0);
 
-            await expect(sut.cancelBet(0)).to.be.revertedWithCustomError(sut, "BetCancelledError");
+            await expect(sut.cancelBet(0)).to.be.revertedWithCustomError(sut, "BetIsCancelled");
         });
 
         it("Should revert if the round is in progress", async function () {
@@ -1457,7 +1462,7 @@ describe("HashCrash", function () {
 
             await mine(config.introBlocks);
 
-            await expect(sut.cancelBet(0)).to.be.revertedWithCustomError(sut, "RoundInProgressError");
+            await expect(sut.cancelBet(0)).to.be.revertedWithCustomError(sut, "RoundInProgress");
         });
 
         it("Should set cancelled to true", async function () {
@@ -1512,7 +1517,7 @@ describe("HashCrash", function () {
 
             await mine(config.introBlocks);
 
-            await expect(sut.cashout(config.bets.length)).to.be.revertedWithCustomError(sut, "BetNotFoundError");
+            await expect(sut.cashout(config.bets.length)).to.be.revertedWithCustomError(sut, "BetNotFound");
         });
 
         it("Should revert if the caller does not own the bet", async function () {
@@ -1520,10 +1525,7 @@ describe("HashCrash", function () {
 
             await mine(config.introBlocks);
 
-            await expect(sut.connect(wallets.charlie).cashout(0)).to.be.revertedWithCustomError(
-                sut,
-                "BetNotYoursError"
-            );
+            await expect(sut.connect(wallets.charlie).cashout(0)).to.be.revertedWithCustomError(sut, "BetNotYours");
         });
 
         it("Should revert if the bet is cancelled", async function () {
@@ -1533,13 +1535,13 @@ describe("HashCrash", function () {
 
             await mine(config.introBlocks);
 
-            await expect(sut.cashout(0)).to.be.revertedWithCustomError(sut, "BetCancelledError");
+            await expect(sut.cashout(0)).to.be.revertedWithCustomError(sut, "BetIsCancelled");
         });
 
         it("Should revert if the round has not started yet", async function () {
             const { sut } = await loadFixture(betFixture);
 
-            await expect(sut.cashout(0)).to.be.revertedWithCustomError(sut, "RoundNotStartedError");
+            await expect(sut.cashout(0)).to.be.revertedWithCustomError(sut, "RoundNotStarted");
         });
 
         it("Should revert if the cashout index has already passed", async function () {
@@ -1547,7 +1549,7 @@ describe("HashCrash", function () {
 
             await mine(config.introBlocks + config.bets[0].cashoutIndex + 1);
 
-            await expect(sut.cashout(0)).to.be.revertedWithCustomError(sut, "InvalidCashoutIndexError");
+            await expect(sut.cashout(0)).to.be.revertedWithCustomError(sut, "AlreadyCashedOut");
         });
 
         it("Should update the cashout index", async function () {
@@ -1584,17 +1586,15 @@ describe("HashCrash", function () {
 
             await expect(sut.connect(wallets.alice).reveal(config.genesisSalt, nextHash)).to.be.revertedWithCustomError(
                 sut,
-                "NotHashProducerError"
+                "NotHashProducer"
             );
         });
 
         it("Should revert if the hash does not match the salt", async function () {
             const { sut } = await loadFixture(baseFixture);
 
-            await expect(sut.reveal(ethers.hexlify(ethers.randomBytes(32)), nextHash)).to.be.revertedWithCustomError(
-                sut,
-                "InvalidHashError"
-            );
+            const salt = ethers.hexlify(ethers.randomBytes(32));
+            await expect(sut.reveal(salt, nextHash)).to.be.revertedWithCustomError(sut, "InvalidBytes").withArgs(salt);
         });
 
         it("Should revert if this function was called too early", async function () {
@@ -1602,7 +1602,7 @@ describe("HashCrash", function () {
 
             await expect(sut.reveal(config.genesisSalt, nextHash)).to.be.revertedWithCustomError(
                 lootTable,
-                "MissingBlockhashError"
+                "MissingBlockhash"
             );
         });
 
@@ -1803,29 +1803,29 @@ describe("HashCrash", function () {
         it("Should revert if the round is idle", async function () {
             const { sut } = await loadFixture(baseFixture);
 
-            await expect(sut.emergencyRefund()).to.be.revertedWithCustomError(sut, "RoundNotRefundableError");
+            await expect(sut.emergencyRefund()).to.be.revertedWithCustomError(sut, "RoundNotRefundable");
         });
 
         it("Should revert if the round has not started yet", async function () {
             const { sut } = await loadFixture(betFixture);
 
-            await expect(sut.emergencyRefund()).to.be.revertedWithCustomError(sut, "RoundNotRefundableError");
+            await expect(sut.emergencyRefund()).to.be.revertedWithCustomError(sut, "RoundNotRefundable");
         });
 
         it("Should revert if the round can still be revealed", async function () {
             const { sut } = await loadFixture(completedBetFixture);
 
-            await expect(sut.emergencyRefund()).to.be.revertedWithCustomError(sut, "RoundNotRefundableError");
+            await expect(sut.emergencyRefund()).to.be.revertedWithCustomError(sut, "RoundNotRefundable");
         });
 
         it("Should not be callable until 256 blocks have passed the round start block", async function () {
             const { sut, config } = await loadFixture(liquidFixture);
 
-            await expect(sut.emergencyRefund()).to.be.revertedWithCustomError(sut, "RoundNotRefundableError");
+            await expect(sut.emergencyRefund()).to.be.revertedWithCustomError(sut, "RoundNotRefundable");
             await sut.placeBet(minimumValue, 10);
 
             for (let i = 0; i < config.introBlocks + 256; i++) {
-                await expect(sut.emergencyRefund()).to.be.revertedWithCustomError(sut, "RoundNotRefundableError");
+                await expect(sut.emergencyRefund()).to.be.revertedWithCustomError(sut, "RoundNotRefundable");
             }
 
             await expect(sut.emergencyRefund()).to.not.be.reverted;

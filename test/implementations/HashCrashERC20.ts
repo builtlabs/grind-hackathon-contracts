@@ -155,9 +155,10 @@ describe("HashCrashERC20", function () {
 
             await sut.setActive(true);
 
-            await expect(
-                sut.placeBet(0n, 1n, { value: ethers.parseEther("1") })
-            ).to.be.revertedWithCustomError(sut, "NativeValueNotAllowed");
+            await expect(sut.placeBet(0n, 1n, { value: ethers.parseEther("1") })).to.be.revertedWithCustomError(
+                sut,
+                "NativeValueNotAllowed"
+            );
         });
 
         it("Should allow token only", async function () {
@@ -167,7 +168,7 @@ describe("HashCrashERC20", function () {
             await token.mint(wallets.deployer.address, liquidity);
             await token.approve(sut.target, liquidity);
             await sut.deposit(liquidity);
-            
+
             await sut.setActive(true);
 
             await token.mint(wallets.deployer.address, minimumValue);
@@ -183,15 +184,16 @@ describe("HashCrashERC20", function () {
             expect(bet.cancelled).to.equal(false);
             expect(bet.cashoutIndex).to.equal(index);
         });
-    })
+    });
 
     describe("deposit", function () {
         it("Should revert if native eth is given", async function () {
             const { sut } = await loadFixture(fixture);
 
-            await expect(
-                sut.deposit(0n, { value: ethers.parseEther("1") })
-            ).to.be.revertedWithCustomError(sut, "NativeValueNotAllowed");
+            await expect(sut.deposit(0n, { value: ethers.parseEther("1") })).to.be.revertedWithCustomError(
+                sut,
+                "NativeValueNotAllowed"
+            );
         });
 
         it("Should allow token only", async function () {
@@ -205,5 +207,5 @@ describe("HashCrashERC20", function () {
             const shares = await sut.getUserShares(wallets.deployer.address);
             expect(shares).to.equal(minimumValue);
         });
-    })
+    });
 });

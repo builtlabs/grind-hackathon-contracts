@@ -15,10 +15,11 @@ contract PlatformInterface is WrappedContext, Ownable {
 
     // #######################################################################################
 
-    error InvalidValueError();
-    error InvalidAddressError();
-    error AlreadyReferredError();
-    error NotCurrentSeasonError();
+    error AlreadyReferred();
+    error SeasonNotStarted();
+
+    error InvalidValue(uint256 value);
+    error InvalidAddress(address addr);
 
     event PlatformSet(address indexed platform);
     event SeasonStarted(uint64 indexed season, address[] gamemodes);
@@ -121,7 +122,7 @@ contract PlatformInterface is WrappedContext, Ownable {
             end++;
         }
 
-        if (_startCounter != end) revert NotCurrentSeasonError();
+        if (_startCounter != end) revert SeasonNotStarted();
 
         _endCounter = end;
     }
@@ -137,8 +138,6 @@ contract PlatformInterface is WrappedContext, Ownable {
     /// @param _numerator The numerator for the referral reward, must be less than or equal to DENOMINATOR.
     /// @dev It is the callers responsibility to ensure the sum of all numerators does not exceed DENOMINATOR.
     function setReferralReward(uint256 _index, uint256 _numerator) external onlyOwner {
-        if (_numerator > DENOMINATOR) revert InvalidValueError();
-
         _setReferralReward(_index, _numerator);
     }
 
@@ -148,8 +147,10 @@ contract PlatformInterface is WrappedContext, Ownable {
     /// @param _referrer The address of the referrer.
     /// @dev This function can only be called once per user. If the user already has a referrer, it will revert.
     function setReferredBy(address _referrer) external {
-        if (_referrer == address(0) || _referrer == msg.sender || _isCyclical(_referrer)) revert InvalidAddressError();
-        if (_referredBy[msg.sender] != address(0)) revert AlreadyReferredError();
+        if (_referredBy[msg.sender] != address(0)) revert AlreadyReferred();
+
+        if (_referrer == address(0) || _referrer == msg.sender || _isCyclical(_referrer))
+            revert InvalidAddress(_referrer);
 
         _referredBy[msg.sender] = _referrer;
         emit Referral(msg.sender, _referrer);
@@ -180,10 +181,10 @@ contract PlatformInterface is WrappedContext, Ownable {
     /// @dev If the token is WETH, it will convert the native currency to WETH.
     function receiveFee(address _token, uint256 _value) external payable {
         uint256 _total = msg.value + _value;
-        if (_total == 0) revert InvalidValueError();
+        if (_total == 0) revert InvalidValue(_total);
 
         if (msg.value > 0) {
-            if (_token != _getWETH()) revert InvalidAddressError();
+            if (_token != _getWETH()) revert InvalidAddress(_token);
             _nativeToWrapped();
         }
 

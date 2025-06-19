@@ -10,23 +10,20 @@ import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
 abstract contract HashCrash is Liquidity {
     uint256 private constant _MAX_BET_QUEUE_SIZE = 256;
 
-    error NotActiveError();
+    error NotActive();
+    error NotHashProducer();
+    error AlreadyCashedOut();
 
-    error BetNotFoundError();
-    error BetNotYoursError();
-    error BetCancelledError();
+    error BetNotFound();
+    error BetNotYours();
+    error BetIsCancelled();
 
-    error NotHashProducerError();
+    error RoundIsFull();
+    error RoundInProgress();
+    error RoundNotStarted();
+    error RoundNotRefundable();
 
-    error RoundFullError();
-    error RoundInProgressError();
-    error RoundNotStartedError();
-
-    error InvalidHashError();
-    error InvalidCashoutIndexError();
-    error InvalidCancelReturnNumeratorError();
-
-    error RoundNotRefundableError();
+    error InvalidBytes(bytes32 value);
 
     // #######################################################################################
 
@@ -64,7 +61,7 @@ abstract contract HashCrash is Liquidity {
     }
 
     modifier onlyHashProducer() {
-        if (msg.sender != _hashProducer) revert NotHashProducerError();
+        if (msg.sender != _hashProducer) revert NotHashProducer();
         _;
     }
 
@@ -172,7 +169,7 @@ abstract contract HashCrash is Liquidity {
 
     /// @notice Gets the bet at the specified index.
     function getBet(uint256 _index) external view returns (BetOutput memory) {
-        if (_index >= _betsLength) revert BetNotFoundError();
+        if (_index >= _betsLength) revert BetNotFound();
 
         uint256 bitmap = _betCancelledBitmap;
         Bet storage bet = _bets[_index];
@@ -337,9 +334,9 @@ abstract contract HashCrash is Liquidity {
         uint256 length = _betsLength;
 
         // Ensure the bet is valid
-        if (length == _MAX_BET_QUEUE_SIZE) revert RoundFullError();
-        if (_roundStartBlock <= block.number) revert RoundInProgressError();
-        if (_lootTable.getLength() <= _autoCashout) revert InvalidCashoutIndexError();
+        if (length == _MAX_BET_QUEUE_SIZE) revert RoundIsFull();
+        if (_roundStartBlock <= block.number) revert RoundInProgress();
+        if (_lootTable.getLength() <= _autoCashout) revert InvalidValue(_autoCashout);
 
         // Wrap any native ether, standardize behavior between weth and other erc20's.
         _amount = _receiveValue(msg.sender, _amount);
@@ -367,8 +364,8 @@ abstract contract HashCrash is Liquidity {
         Bet storage bet = _getBet(_index, _betCancelledBitmap);
 
         // Ensure the update is valid
-        if (_roundStartBlock <= block.number) revert RoundInProgressError();
-        if (_lootTable.getLength() <= _autoCashout) revert InvalidCashoutIndexError();
+        if (_roundStartBlock <= block.number) revert RoundInProgress();
+        if (_lootTable.getLength() <= _autoCashout) revert InvalidValue(_autoCashout);
 
         // Update the round liquidity
         uint256 amount = bet.amount;
@@ -389,7 +386,7 @@ abstract contract HashCrash is Liquidity {
         Bet storage bet = _getBet(_index, _bitmap);
 
         // Ensure the game has not started
-        if (_roundStartBlock <= block.number) revert RoundInProgressError();
+        if (_roundStartBlock <= block.number) revert RoundInProgress();
 
         // Cancel the bet
         _betCancelledBitmap = _setCancelled(_index, _bitmap);
@@ -411,11 +408,11 @@ abstract contract HashCrash is Liquidity {
 
         // Ensure the game has started
         uint64 _bn = uint64(block.number);
-        if (_bn < _roundStartBlock) revert RoundNotStartedError();
+        if (_bn < _roundStartBlock) revert RoundNotStarted();
 
         // Ensure the user has not cashed out already
         uint64 blockIndex = _bn - _roundStartBlock;
-        if (bet.cashoutIndex <= blockIndex) revert InvalidCashoutIndexError();
+        if (bet.cashoutIndex <= blockIndex) revert AlreadyCashedOut();
 
         bet.cashoutIndex = blockIndex;
 
@@ -426,7 +423,7 @@ abstract contract HashCrash is Liquidity {
     /// @param _salt The salt used to generate the round hash.
     /// @param _nextHash The hash for the next round.
     function reveal(bytes32 _salt, bytes32 _nextHash) external onlyHashProducer {
-        if (keccak256(abi.encodePacked(_salt)) != _roundHash) revert InvalidHashError();
+        if (keccak256(abi.encodePacked(_salt)) != _roundHash) revert InvalidBytes(_salt);
 
         uint64 deadIndex = _lootTable.getDeadIndex(_salt, _roundStartBlock);
 
@@ -447,7 +444,7 @@ abstract contract HashCrash is Liquidity {
     /// @dev After this function is called, the contract is disabled and no further bets can be placed until the issue is resolved.
     function emergencyRefund() external {
         if (_roundStartBlock == 0 || block.number <= _roundStartBlock || blockhash(_roundStartBlock) != bytes32(0))
-            revert RoundNotRefundableError();
+            revert RoundNotRefundable();
 
         _roundStartBlock = 0;
         _active = false;
@@ -520,12 +517,12 @@ abstract contract HashCrash is Liquidity {
     }
 
     function _getBet(uint256 _index, uint256 _bitmap) private view returns (Bet storage bet_) {
-        if (_index >= _betsLength) revert BetNotFoundError();
+        if (_index >= _betsLength) revert BetNotFound();
 
         bet_ = _bets[_index];
 
-        if (bet_.user != msg.sender) revert BetNotYoursError();
-        if (_getCancelled(_index, _bitmap)) revert BetCancelledError();
+        if (bet_.user != msg.sender) revert BetNotYours();
+        if (_getCancelled(_index, _bitmap)) revert BetIsCancelled();
     }
 
     function _getCancelReturn(uint256 _amount) private view returns (uint256) {
@@ -541,7 +538,7 @@ abstract contract HashCrash is Liquidity {
     }
 
     function _initialiseRound() private {
-        if (!_active) revert NotActiveError();
+        if (!_active) revert NotActive();
 
         // Apply the staged loot table if it exists
         address staged = _stagedLootTable;

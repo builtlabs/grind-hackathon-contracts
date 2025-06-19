@@ -77,7 +77,7 @@ describe("LootTable", function () {
         it("Should revert if the index is out of range", async function () {
             const { sut } = await loadFixture(fixture);
 
-            await expect(sut.multiply(oneEther, 1)).to.be.revertedWithCustomError(sut, "InvalidIndexError");
+            await expect(sut.multiply(oneEther, 1)).to.be.revertedWithCustomError(sut, "InvalidIndex");
         });
 
         it("Should return the value multiplied by the multiplier of the valid index", async function () {
@@ -91,7 +91,7 @@ describe("LootTable", function () {
         it("Should revert if the index is out of range", async function () {
             const { sut } = await loadFixture(fixture);
 
-            await expect(sut.isDead(oneEther, 1)).to.be.revertedWithCustomError(sut, "InvalidIndexError");
+            await expect(sut.isDead(oneEther, 1)).to.be.revertedWithCustomError(sut, "InvalidIndex");
         });
 
         it("Should return true when the normalised rng is less than the probability at the valid index", async function () {
@@ -120,10 +120,7 @@ describe("LootTable", function () {
             const { sut } = await loadFixture(fixture);
 
             const startBlock = await ethers.provider.getBlockNumber();
-            await expect(sut.getDeadIndex(salt, startBlock)).to.be.revertedWithCustomError(
-                sut,
-                "MissingBlockhashError"
-            );
+            await expect(sut.getDeadIndex(salt, startBlock)).to.be.revertedWithCustomError(sut, "MissingBlockhash");
         });
 
         it("Should get the expected dead index", async function () {

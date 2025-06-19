@@ -9,12 +9,12 @@ abstract contract LootTable is ILootTable {
     uint256 private constant MULTIPLIER_DENOMINATOR = 1e6;
     uint256 private constant PROBABILITY_DENOMINATOR = 1e18;
 
-    error MissingBlockhashError();
+    error MissingBlockhash();
 
     // #######################################################################################
 
     modifier validIndex(uint256 _index) {
-        if (_index + 1 > _getLength()) revert InvalidIndexError();
+        if (_index + 1 > _getLength()) revert InvalidIndex();
         _;
     }
 
@@ -94,6 +94,6 @@ abstract contract LootTable is ILootTable {
 
     function _getBlockHash(uint256 _blockNumber) private view returns (bytes32 blockHash_) {
         blockHash_ = blockhash(_blockNumber);
-        if (blockHash_ == bytes32(0)) revert MissingBlockhashError();
+        if (blockHash_ == bytes32(0)) revert MissingBlockhash();
     }
 }
