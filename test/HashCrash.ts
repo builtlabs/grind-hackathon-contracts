@@ -179,9 +179,9 @@ describe("HashCrash", function () {
         const length = Number(await lootTable.getLength());
         await mine(config.introBlocks + length + 1); // + 1 otherwise cant read that final block hash
 
-        const deadIndex = await lootTable.getDeadIndex(config.genesisSalt, await sut.getRoundStartBlock());
+        const deathProof = await lootTable.getDeathProof(config.genesisSalt, await sut.getRoundStartBlock());
 
-        return { sut, lootTable, token, wallets, config: { ...config, deadIndex } };
+        return { sut, lootTable, token, wallets, config: { ...config, deathProof } };
     }
 
     async function unrecoverableRoundFixture() {
@@ -1773,7 +1773,7 @@ describe("HashCrash", function () {
 
             await expect(sut.reveal(config.genesisSalt, nextHash))
                 .to.emit(sut, "RoundEnded")
-                .withArgs(config.genesisHash, config.genesisSalt, config.deadIndex);
+                .withArgs(config.genesisHash, config.genesisSalt, config.deathProof[0], config.deathProof[1]);
         });
 
         it("Should payout winning bets", async function () {
@@ -1783,7 +1783,7 @@ describe("HashCrash", function () {
 
             await mine(config.introBlocks + length + 1);
 
-            const deadIndex = await lootTable.getDeadIndex(config.genesisSalt, await sut.getRoundStartBlock());
+            const deathProof = await lootTable.getDeathProof(config.genesisSalt, await sut.getRoundStartBlock());
 
             const sutBalanceBefore = await token.balanceOf(sut.target);
             const beforeBalances = await Promise.all(config.bets.map((b) => token.balanceOf(b.wallet.address)));
@@ -1794,7 +1794,7 @@ describe("HashCrash", function () {
             const afterBalances = await Promise.all(config.bets.map((b) => token.balanceOf(b.wallet.address)));
 
             let sum = 0n;
-            for (let i = 0; i < deadIndex; i++) {
+            for (let i = 0; i < Number(deathProof[0]); i++) {
                 const expectedWin = await lootTable.multiply(config.bets[i].amount, config.bets[i].cashoutIndex);
                 expect(afterBalances[i]).to.equal(beforeBalances[i] + expectedWin);
                 sum += expectedWin;
@@ -1810,9 +1810,9 @@ describe("HashCrash", function () {
 
             await mine(config.introBlocks + length + 1);
 
-            const deadIndex = await lootTable.getDeadIndex(config.genesisSalt, await sut.getRoundStartBlock());
+            const deathProof = await lootTable.getDeathProof(config.genesisSalt, await sut.getRoundStartBlock());
 
-            expect(deadIndex).to.equal(length);
+            expect(deathProof[0]).to.equal(length);
 
             const sutBalanceBefore = await token.balanceOf(sut.target);
             const beforeBalances = await Promise.all(config.bets.map((b) => token.balanceOf(b.wallet.address)));
@@ -1823,7 +1823,7 @@ describe("HashCrash", function () {
             const afterBalances = await Promise.all(config.bets.map((b) => token.balanceOf(b.wallet.address)));
 
             let sum = 0n;
-            for (let i = 0; i < deadIndex; i++) {
+            for (let i = 0; i < Number(deathProof[0]); i++) {
                 const expectedWin = await lootTable.multiply(config.bets[i].amount, config.bets[i].cashoutIndex);
                 expect(afterBalances[i]).to.equal(beforeBalances[i] + expectedWin);
                 sum += expectedWin;
@@ -1844,7 +1844,7 @@ describe("HashCrash", function () {
 
             await mine(config.introBlocks + length - cancelToExc + 1);
 
-            const deadIndex = await lootTable.getDeadIndex(config.genesisSalt, await sut.getRoundStartBlock());
+            const deathProof = await lootTable.getDeathProof(config.genesisSalt, await sut.getRoundStartBlock());
 
             const sutBalanceBefore = await token.balanceOf(sut.target);
             const beforeBalances = await Promise.all(config.bets.map((b) => token.balanceOf(b.wallet.address)));
@@ -1855,7 +1855,7 @@ describe("HashCrash", function () {
             const afterBalances = await Promise.all(config.bets.map((b) => token.balanceOf(b.wallet.address)));
 
             let sum = 0n;
-            for (let i = cancelToExc; i < deadIndex; i++) {
+            for (let i = cancelToExc; i < Number(deathProof[0]); i++) {
                 const expectedWin = await lootTable.multiply(config.bets[i].amount, config.bets[i].cashoutIndex);
                 expect(afterBalances[i]).to.equal(beforeBalances[i] + expectedWin);
                 sum += expectedWin;
@@ -1871,7 +1871,7 @@ describe("HashCrash", function () {
 
             await mine(config.introBlocks + length + 1);
 
-            const deadIndex = Number(await lootTable.getDeadIndex(config.genesisSalt, await sut.getRoundStartBlock()));
+            const deathProof = await lootTable.getDeathProof(config.genesisSalt, await sut.getRoundStartBlock());
 
             const beforeBalances = await Promise.all(config.bets.map((b) => token.balanceOf(b.wallet.address)));
 
@@ -1879,7 +1879,7 @@ describe("HashCrash", function () {
 
             const afterBalances = await Promise.all(config.bets.map((b) => token.balanceOf(b.wallet.address)));
 
-            for (let i = deadIndex; i < config.bets.length; i++) {
+            for (let i = Number(deathProof[0]); i < config.bets.length; i++) {
                 expect(afterBalances[i]).to.equal(beforeBalances[i]);
             }
         });
@@ -1931,7 +1931,7 @@ describe("HashCrash", function () {
 
             await expect(sut.reveal(config.genesisSalt, nextHash))
                 .to.emit(sut, "RoundEnded")
-                .withArgs(config.genesisHash, config.genesisSalt, config.deadIndex);
+                .withArgs(config.genesisHash, config.genesisSalt, config.deathProof[0], config.deathProof[1]);
         });
 
         it("Should reset the round start block", async function () {

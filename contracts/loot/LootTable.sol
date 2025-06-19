@@ -57,25 +57,34 @@ abstract contract LootTable is ILootTable {
         return _isDead(_rng, _index);
     }
 
-    /// @notice Returns the dead index for a given salt.
-    /// @dev The dead index is between 0 and the loot table length (inclusive). The final multiplier for the round is at deadIndex - 1. Unless it is 0, then the round has a 0x multiplier.
-    function getDeadIndex(bytes32 _salt, uint256 _roundStartBlock) external view returns (uint64) {
+    /// @notice Returns the dead index for a given salt and the hashes used to determine it.
+    /// @dev The dead index is between 0 and the loot table length (inclusive).
+    /// @dev The final multiplier for the round is at deadIndex - 1. Unless it is 0, then the round has a 0x multiplier.
+    function getDeathProof(bytes32 _salt, uint256 _roundStartBlock) external view returns (uint64, bytes32[] memory) {
         uint64 length = uint64(_getLength());
+        bytes32[] memory hashes = new bytes32[](length);
 
         for (uint64 i = 0; i < length; i++) {
             // Generate a random number based on the salt and the block hash
             // The salt is unknown to block producers.
             // The block hash is unknown to the hash producer.
-            uint256 rng = uint256(keccak256(abi.encodePacked(_salt, _getBlockHash(_roundStartBlock + i))));
+            hashes[i] = _getBlockHash(_roundStartBlock + i);
+            uint256 rng = uint256(keccak256(abi.encodePacked(_salt, hashes[i])));
 
             // Check if the generated random number is dead at this index
             if (_isDead(rng, i)) {
-                return i;
+                bytes32[] memory usedHashes = new bytes32[](i + 1);
+
+                for (uint64 j = 0; j <= i; j++) {
+                    usedHashes[j] = hashes[j];
+                }
+
+                return (i, usedHashes);
             }
         }
 
         // This happens when no dead index is found, meaning the round has ended with the maximum multiplier.
-        return length;
+        return (length, hashes);
     }
 
     // #######################################################################################
