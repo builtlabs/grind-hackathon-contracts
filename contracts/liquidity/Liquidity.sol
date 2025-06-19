@@ -13,7 +13,12 @@ abstract contract Liquidity is TokenHolder {
 
     event LiquidityAdded(address indexed user, uint256 tokenDelta, uint256 shareDelta);
     event LiquidityRemoved(address indexed user, uint256 tokenDelta, uint256 shareDelta);
-    event LiquidityChangeQueued(uint8 indexed action, address indexed user, uint256 amount);
+
+    event LiquidityChangeQueued(uint64 indexed nonce, address indexed user, uint8 action, uint256 amount);
+    event LiquidityQueueCleared(uint64 indexed nonce);
+
+    event MaxExposureUpdated(uint64 newMaxExposure);
+    event LowLiquidityThresholdUpdated(uint256 newThreshold);
 
     error OneChangePerRound();
     error LiquidityQueueFull();
@@ -51,7 +56,7 @@ abstract contract Liquidity is TokenHolder {
     /// @param lowLiquidityThreshold_ The threshold below which the parent is notified the _availableLiquidity is low.
     constructor(uint64 maxExposureNumerator_, uint256 lowLiquidityThreshold_) {
         _setMaxExposure(maxExposureNumerator_);
-        _lowLiquidityThreshold = lowLiquidityThreshold_;
+        _setLowLiquidityThreshold(lowLiquidityThreshold_);
 
         _liquidityQueueNonce = 1; // Start at 1 to avoid conflicts with the initial user queue nonce.
     }
@@ -67,7 +72,7 @@ abstract contract Liquidity is TokenHolder {
     /// @notice Sets the low liquidity threshold.
     /// @param _value The new low liquidity threshold.
     function setLowLiquidityThreshold(uint128 _value) external onlyOwner {
-        _lowLiquidityThreshold = _value;
+        _setLowLiquidityThreshold(_value);
     }
 
     // #######################################################################################
@@ -198,9 +203,11 @@ abstract contract Liquidity is TokenHolder {
 
         _resetLiquidity();
 
+        uint64 nonce = _liquidityQueueNonce;
         unchecked {
-            _liquidityQueueNonce++;
+            _liquidityQueueNonce = nonce + 1;
         }
+        emit LiquidityQueueCleared(nonce);
     }
 
     function _useRoundLiquidity(uint256 _amount) internal {
@@ -243,6 +250,12 @@ abstract contract Liquidity is TokenHolder {
         }
 
         _maxExposureNumerator = _numerator;
+        emit MaxExposureUpdated(_numerator);
+    }
+
+    function _setLowLiquidityThreshold(uint256 _value) private {
+        _lowLiquidityThreshold = _value;
+        emit LowLiquidityThresholdUpdated(_value);
     }
 
     function _queueLiquidityChange(uint8 _action, uint256 _amount) private {
@@ -258,7 +271,7 @@ abstract contract Liquidity is TokenHolder {
             _liquidityQueueLength = length + 1;
         }
 
-        emit LiquidityChangeQueued(_action, msg.sender, _amount);
+        emit LiquidityChangeQueued(nonce, msg.sender, _action, _amount);
     }
 
     function _addLiquidity(address _user, uint256 _amount, uint256 _balance) private {

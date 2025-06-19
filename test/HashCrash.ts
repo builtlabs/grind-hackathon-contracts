@@ -461,7 +461,7 @@ describe("HashCrash", function () {
             expect(await sut.getLootTable()).to.equal(lootTable.target);
         });
 
-        it("Should emit LootTableUpdated", async function () {
+        it("Should emit setup events", async function () {
             const { token, lootTable, config } = await loadFixture(baseFixture);
 
             const HASHCRASH = await ethers.getContractFactory("HashCrashHarness");
@@ -479,13 +479,35 @@ describe("HashCrash", function () {
 
             const iface = HASHCRASH.interface;
 
-            const platformSetTopic = id("LootTableUpdated(address)");
+            expect(
+                receipt.logs
+                    .filter((log) => log.topics[0] === id("LootTableUpdated(address)"))
+                    .map((log) => iface.decodeEventLog("LootTableUpdated", log.data, log.topics))
+            ).to.deep.include.members([[lootTable.target]]);
 
-            const events = receipt.logs
-                .filter((log) => log.topics[0] === platformSetTopic)
-                .map((log) => iface.decodeEventLog("LootTableUpdated", log.data, log.topics));
+            expect(
+                receipt.logs
+                    .filter((log) => log.topics[0] === id("HashProducerUpdated(address)"))
+                    .map((log) => iface.decodeEventLog("HashProducerUpdated", log.data, log.topics))
+            ).to.deep.include.members([[config.hashProducer]]);
 
-            expect(events).to.deep.include.members([[lootTable.target]]);
+            expect(
+                receipt.logs
+                    .filter((log) => log.topics[0] === id("IntroBlocksUpdated(uint64)"))
+                    .map((log) => iface.decodeEventLog("IntroBlocksUpdated", log.data, log.topics))
+            ).to.deep.include.members([[20n]]);
+
+            expect(
+                receipt.logs
+                    .filter((log) => log.topics[0] === id("ReducedIntroBlocksUpdated(uint32)"))
+                    .map((log) => iface.decodeEventLog("ReducedIntroBlocksUpdated", log.data, log.topics))
+            ).to.deep.include.members([[5n]]);
+
+            expect(
+                receipt.logs
+                    .filter((log) => log.topics[0] === id("CancelReturnNumeratorUpdated(uint32)"))
+                    .map((log) => iface.decodeEventLog("CancelReturnNumeratorUpdated", log.data, log.topics))
+            ).to.deep.include.members([[9700n]]);
         });
     });
 
@@ -1039,6 +1061,14 @@ describe("HashCrash", function () {
 
             expect(await sut.getHashProducer()).to.equal(wallets.bob.address);
         });
+
+        it("Should emit HashProducerUpdated", async function () {
+            const { sut, wallets } = await loadFixture(baseFixture);
+
+            await expect(sut.setHashProducer(wallets.bob.address))
+                .to.emit(sut, "HashProducerUpdated")
+                .withArgs(wallets.bob.address);
+        });
     });
 
     describe("setCancelReturnNumerator", function () {
@@ -1066,6 +1096,12 @@ describe("HashCrash", function () {
 
             expect(await sut.getCancelReturnNumerator()).to.equal(10);
         });
+
+        it("Should emit CancelReturnNumeratorUpdated", async function () {
+            const { sut } = await loadFixture(baseFixture);
+
+            await expect(sut.setCancelReturnNumerator(10)).to.emit(sut, "CancelReturnNumeratorUpdated").withArgs(10);
+        });
     });
 
     describe("setIntroBlocks", function () {
@@ -1085,6 +1121,12 @@ describe("HashCrash", function () {
 
             expect(await sut.getIntroBlocks()).to.equal(10);
         });
+
+        it("Should emit IntroBlocksUpdated", async function () {
+            const { sut } = await loadFixture(baseFixture);
+
+            await expect(sut.setIntroBlocks(10)).to.emit(sut, "IntroBlocksUpdated").withArgs(10);
+        });
     });
 
     describe("setReducedIntroBlocks", function () {
@@ -1103,6 +1145,12 @@ describe("HashCrash", function () {
             await sut.setReducedIntroBlocks(10);
 
             expect(await sut.getReducedIntroBlocks()).to.equal(10);
+        });
+
+        it("Should emit ReducedIntroBlocksUpdated", async function () {
+            const { sut } = await loadFixture(baseFixture);
+
+            await expect(sut.setReducedIntroBlocks(10)).to.emit(sut, "ReducedIntroBlocksUpdated").withArgs(10);
         });
     });
 
@@ -1228,12 +1276,13 @@ describe("HashCrash", function () {
             it("Should emit RoundStarted", async function () {
                 const { sut, config } = await loadFixture(liquidFixture);
 
+                const liquidity = await sut.getAvailableLiquidity();
                 const previous = await ethers.provider.getBlockNumber();
                 const expectedStartBlock = previous + 1 + config.introBlocks; // +1 because event is emitted during the next block
 
                 await expect(sut.placeBet(oneEther, 10))
                     .to.emit(sut, "RoundStarted")
-                    .withArgs(config.genesisHash, expectedStartBlock, 0);
+                    .withArgs(config.genesisHash, expectedStartBlock, 0, liquidity);
             });
         });
 
@@ -1932,6 +1981,12 @@ describe("HashCrash", function () {
             await sut.emergencyRefund();
 
             expect(await sut.getActive()).to.equal(false);
+        });
+
+        it("Should emit ActiveUpdated", async function () {
+            const { sut } = await loadFixture(unrecoverableRoundFixture);
+
+            await expect(sut.emergencyRefund()).to.emit(sut, "ActiveUpdated").withArgs(true);
         });
 
         it("Should keep the same hash", async function () {

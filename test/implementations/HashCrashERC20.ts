@@ -121,7 +121,7 @@ describe("HashCrashERC20", function () {
             expect(await sut.getLootTable()).to.equal(lootTable.target);
         });
 
-        it("Should emit LootTableUpdated", async function () {
+        it("Should emit setup events", async function () {
             const { token, lootTable, config } = await loadFixture(fixture);
 
             const HASHCRASH = await ethers.getContractFactory("HashCrashERC20");
@@ -139,13 +139,35 @@ describe("HashCrashERC20", function () {
 
             const iface = HASHCRASH.interface;
 
-            const platformSetTopic = id("LootTableUpdated(address)");
+            expect(
+                receipt.logs
+                    .filter((log) => log.topics[0] === id("LootTableUpdated(address)"))
+                    .map((log) => iface.decodeEventLog("LootTableUpdated", log.data, log.topics))
+            ).to.deep.include.members([[lootTable.target]]);
 
-            const events = receipt.logs
-                .filter((log) => log.topics[0] === platformSetTopic)
-                .map((log) => iface.decodeEventLog("LootTableUpdated", log.data, log.topics));
+            expect(
+                receipt.logs
+                    .filter((log) => log.topics[0] === id("HashProducerUpdated(address)"))
+                    .map((log) => iface.decodeEventLog("HashProducerUpdated", log.data, log.topics))
+            ).to.deep.include.members([[config.hashProducer]]);
 
-            expect(events).to.deep.include.members([[lootTable.target]]);
+            expect(
+                receipt.logs
+                    .filter((log) => log.topics[0] === id("IntroBlocksUpdated(uint64)"))
+                    .map((log) => iface.decodeEventLog("IntroBlocksUpdated", log.data, log.topics))
+            ).to.deep.include.members([[20n]]);
+
+            expect(
+                receipt.logs
+                    .filter((log) => log.topics[0] === id("ReducedIntroBlocksUpdated(uint32)"))
+                    .map((log) => iface.decodeEventLog("ReducedIntroBlocksUpdated", log.data, log.topics))
+            ).to.deep.include.members([[5n]]);
+
+            expect(
+                receipt.logs
+                    .filter((log) => log.topics[0] === id("CancelReturnNumeratorUpdated(uint32)"))
+                    .map((log) => iface.decodeEventLog("CancelReturnNumeratorUpdated", log.data, log.topics))
+            ).to.deep.include.members([[9700n]]);
         });
     });
 

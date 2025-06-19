@@ -27,10 +27,11 @@ abstract contract HashCrash is Liquidity {
 
     // #######################################################################################
 
-    event RoundStarted(bytes32 indexed roundHash, uint64 startBlock, uint64 hashIndex);
-    event RoundAccelerated(bytes32 indexed roundHash, uint64 startBlock);
+    event RoundStarted(bytes32 indexed roundHash, uint64 startBlock, uint64 hashIndex, uint256 liquidity);
     event RoundEnded(bytes32 indexed roundHash, bytes32 roundSalt, uint64 deadIndex);
+
     event RoundRefunded(bytes32 indexed roundHash);
+    event RoundAccelerated(bytes32 indexed roundHash, uint64 startBlock);
 
     event BetPlaced(
         bytes32 indexed roundHash,
@@ -44,6 +45,10 @@ abstract contract HashCrash is Liquidity {
 
     event ActiveUpdated(bool active);
     event LootTableUpdated(address lootTable);
+    event IntroBlocksUpdated(uint64 introBlocks);
+    event HashProducerUpdated(address hashProducer);
+    event ReducedIntroBlocksUpdated(uint32 reducedIntroBlocks);
+    event CancelReturnNumeratorUpdated(uint32 cancelReturnNumerator);
 
     // #######################################################################################
 
@@ -108,6 +113,12 @@ abstract contract HashCrash is Liquidity {
         _hashProducer = hashProducer_;
 
         _setLootTable(lootTable_);
+
+        _setHashProducer(hashProducer_);
+
+        _setIntroBlocks(20);
+        _setReducedIntroBlocks(5);
+        _setCancelReturnNumerator(9700);
     }
 
     // ########################################################################################
@@ -277,36 +288,32 @@ abstract contract HashCrash is Liquidity {
     /// @param active_ The new active state.
     /// @dev If the game is set to inactive, it will not allow the start of a new round.
     function setActive(bool active_) external onlyOwner {
-        if (_active == active_) return;
-
-        _active = active_;
-        emit ActiveUpdated(active_);
+        _setActive(active_);
     }
 
     /// @notice Sets the cancel return numerator.
     /// @param cancelReturnNumerator_ The new cancel return numerator.
     /// @dev The numerator must be less than or equal to the denominator (10000).
     function setCancelReturnNumerator(uint32 cancelReturnNumerator_) external onlyOwner {
-        if (cancelReturnNumerator_ > _DENOMINATOR) revert InvalidCancelReturnNumeratorError();
-        _cancelReturnNumerator = cancelReturnNumerator_;
+        _setCancelReturnNumerator(cancelReturnNumerator_);
     }
 
     /// @notice Sets the hash producer address.
     /// @param hashProducer_ The new hash producer address.
     function setHashProducer(address hashProducer_) external onlyOwner {
-        _hashProducer = hashProducer_;
+        _setHashProducer(hashProducer_);
     }
 
     /// @notice Sets the number of intro blocks before the round starts.
     /// @param introBlocks_ The number of intro blocks.
     function setIntroBlocks(uint64 introBlocks_) external onlyOwner {
-        _introBlocks = introBlocks_;
+        _setIntroBlocks(introBlocks_);
     }
 
     /// @notice Sets the maximum number of intro blocks once low liquidity is hit.
     /// @param reducedIntroBlocks_ The reduced number of intro blocks.
     function setReducedIntroBlocks(uint32 reducedIntroBlocks_) external onlyOwner {
-        _reducedIntroBlocks = reducedIntroBlocks_;
+        _setReducedIntroBlocks(reducedIntroBlocks_);
     }
 
     /// @notice Sets the loot table for the game.
@@ -447,7 +454,7 @@ abstract contract HashCrash is Liquidity {
             revert RoundNotRefundable();
 
         _roundStartBlock = 0;
-        _active = false;
+        _setActive(false);
 
         _refundBets();
         _clearLiquidityQueue();
@@ -548,12 +555,42 @@ abstract contract HashCrash is Liquidity {
         }
 
         _roundStartBlock = uint64(block.number) + _introBlocks;
-        emit RoundStarted(_roundHash, _roundStartBlock, _hashIndex);
+        emit RoundStarted(_roundHash, _roundStartBlock, _hashIndex, _getAvailableLiquidity());
+    }
+
+    function _setActive(bool active_) private {
+        if (_active == active_) return;
+        _active = active_;
+        emit ActiveUpdated(active_);
     }
 
     function _setLootTable(address lootTable_) private {
         _lootTable = ILootTable(lootTable_);
         emit LootTableUpdated(lootTable_);
+    }
+
+    function _setHashProducer(address hashProducer_) private {
+        if (hashProducer_ == address(0)) revert InvalidAddress(hashProducer_);
+        _hashProducer = hashProducer_;
+        emit HashProducerUpdated(hashProducer_);
+    }
+
+    function _setIntroBlocks(uint64 introBlocks_) private {
+        if (introBlocks_ == 0 || introBlocks_ < _reducedIntroBlocks) revert InvalidValue(introBlocks_);
+        _introBlocks = introBlocks_;
+        emit IntroBlocksUpdated(introBlocks_);
+    }
+
+    function _setReducedIntroBlocks(uint32 reducedIntroBlocks_) private {
+        if (reducedIntroBlocks_ == 0 || reducedIntroBlocks_ > _introBlocks) revert InvalidValue(reducedIntroBlocks_);
+        _reducedIntroBlocks = reducedIntroBlocks_;
+        emit ReducedIntroBlocksUpdated(reducedIntroBlocks_);
+    }
+
+    function _setCancelReturnNumerator(uint32 cancelReturnNumerator_) private {
+        if (cancelReturnNumerator_ > _DENOMINATOR) revert InvalidValue(cancelReturnNumerator_);
+        _cancelReturnNumerator = cancelReturnNumerator_;
+        emit CancelReturnNumeratorUpdated(cancelReturnNumerator_);
     }
 
     function _processBets(uint64 _deadIndex) private {

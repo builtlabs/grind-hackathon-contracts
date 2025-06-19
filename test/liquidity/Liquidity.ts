@@ -126,6 +126,14 @@ describe("Liquidity", function () {
 
             expect(await sut.getLowLiquidityThreshold()).to.equal(oneEther);
         });
+
+        it("Should emit LowLiquidityThresholdUpdated", async function () {
+            const { sut } = await loadFixture(fixture);
+
+            await expect(sut.setLowLiquidityThreshold(oneEther))
+                .to.emit(sut, "LowLiquidityThresholdUpdated")
+                .withArgs(oneEther);
+        });
     });
 
     describe("deposit", function () {
@@ -312,10 +320,11 @@ describe("Liquidity", function () {
                 await token.approve(sut.target, oneEther);
 
                 await sut.mockCanChangeLiquidity(false);
+                const nonce = await sut.getLiquidityQueueNonce();
 
                 await expect(sut.deposit(oneEther))
                     .to.emit(sut, "LiquidityChangeQueued")
-                    .withArgs(0, wallets.deployer.address, oneEther);
+                    .withArgs(nonce, wallets.deployer.address, 0, oneEther);
             });
         });
     });
@@ -516,9 +525,10 @@ describe("Liquidity", function () {
 
                 await sut.mockCanChangeLiquidity(false);
 
+                const nonce = await sut.getLiquidityQueueNonce();
                 await expect(sut.withdraw(oneEther))
                     .to.emit(sut, "LiquidityChangeQueued")
-                    .withArgs(1, wallets.deployer.address, oneEther);
+                    .withArgs(nonce, wallets.deployer.address, 1n, oneEther);
             });
         });
     });
