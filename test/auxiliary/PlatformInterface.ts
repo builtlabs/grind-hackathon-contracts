@@ -194,6 +194,14 @@ describe("PlatformInterface", function () {
                 .withArgs(wallets.b.address);
         });
 
+        it("Should revert if setting the platform to the zero address", async function () {
+            const { sut } = await loadFixture(fixture);
+
+            await expect(sut.setPlatform(ethers.ZeroAddress))
+                .to.be.revertedWithCustomError(sut, "InvalidAddress")
+                .withArgs(ethers.ZeroAddress);
+        });
+
         it("Should set the platform", async function () {
             const { sut, wallets } = await loadFixture(fixture);
 
@@ -220,12 +228,33 @@ describe("PlatformInterface", function () {
                 .withArgs(wallets.b.address);
         });
 
-        it("Should return if the bps > DENOMINATOR", async function () {
+        it("Should revert if the reward rates aggregate above 100%", async function () {
             const { sut, wallets } = await loadFixture(fixture);
 
-            await expect(
-                sut.connect(wallets.deployer).setReferralReward(1, DENOMINATOR + 1n)
-            ).to.be.revertedWithCustomError(sut, "InvalidValueError");
+            await expect(sut.connect(wallets.deployer).setReferralReward(0, DENOMINATOR))
+                .to.be.revertedWithCustomError(sut, "InvalidValue")
+                .withArgs(DENOMINATOR + 500n);
+        });
+
+        it("Should revert if adding a set creates a gap", async function () {
+            const { sut, wallets } = await loadFixture(fixture);
+
+            // 0, 1, gap, 3
+            await expect(sut.connect(wallets.deployer).setReferralReward(3, 100n))
+                .to.be.revertedWithCustomError(sut, "InvalidValue")
+                .withArgs(3n);
+        });
+
+        it("Should NOT revert if removing a rate creates a gap", async function () {
+            const { sut, wallets } = await loadFixture(fixture);
+
+            await sut.connect(wallets.deployer).setReferralReward(0, 100n);
+            await sut.connect(wallets.deployer).setReferralReward(1, 100n);
+            await sut.connect(wallets.deployer).setReferralReward(2, 100n);
+            await sut.connect(wallets.deployer).setReferralReward(3, 100n);
+            await sut.connect(wallets.deployer).setReferralReward(4, 100n);
+
+            await expect(sut.connect(wallets.deployer).setReferralReward(3, 0n)).to.not.be.reverted;
         });
 
         it("Should set the _referralBPS", async function () {
@@ -406,19 +435,6 @@ describe("PlatformInterface", function () {
             )
                 .to.be.revertedWithCustomError(sut, "InvalidAddress")
                 .withArgs(token.target);
-        });
-
-        it("Should revert if the reward rates aggregate above 100%", async function () {
-            const { sut, token, wallets } = await loadFixture(fixture);
-
-            const source = wallets.g;
-
-            await sut.connect(wallets.deployer).setReferralReward(0, 10000n); // 100%
-
-            await token.mint(source.address, oneEther);
-            await token.connect(source).approve(sut.target, oneEther);
-
-            await expect(sut.connect(source).receiveFee(token.target, oneEther)).to.be.reverted;
         });
 
         it("Should revert if the token transfer fails", async function () {

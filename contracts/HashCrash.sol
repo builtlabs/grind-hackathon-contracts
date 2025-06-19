@@ -106,12 +106,10 @@ abstract contract HashCrash is Liquidity {
         uint256 lowLiquidityThreshold_,
         address owner_
     ) Liquidity(maxExposureNumerator_, lowLiquidityThreshold_) Ownable(owner_) {
-        _introBlocks = 20;
-        _reducedIntroBlocks = 5;
-        _cancelReturnNumerator = 9700; // 97%
+        if (genesisHash_ == bytes32(0)) revert InvalidBytes(genesisHash_);
         _roundHash = genesisHash_;
-        _hashProducer = hashProducer_;
 
+        if (lootTable_ == address(0)) revert InvalidAddress(lootTable_);
         _setLootTable(lootTable_);
 
         _setHashProducer(hashProducer_);
@@ -320,6 +318,8 @@ abstract contract HashCrash is Liquidity {
     /// @param lootTable_ The new loot table to use.
     /// @dev If the game is currently idle, the loot table is set immediately. Otherwise, it is staged for the next round.
     function setLootTable(address lootTable_) external onlyOwner {
+        if (lootTable_ == address(0)) revert InvalidAddress(lootTable_);
+
         if (_isIdle()) {
             _setLootTable(lootTable_);
         } else {
@@ -430,6 +430,7 @@ abstract contract HashCrash is Liquidity {
     /// @param _salt The salt used to generate the round hash.
     /// @param _nextHash The hash for the next round.
     function reveal(bytes32 _salt, bytes32 _nextHash) external onlyHashProducer {
+        if (_nextHash == bytes32(0)) revert InvalidBytes(_nextHash);
         if (keccak256(abi.encodePacked(_salt)) != _roundHash) revert InvalidBytes(_salt);
 
         uint64 deadIndex = _lootTable.getDeadIndex(_salt, _roundStartBlock);

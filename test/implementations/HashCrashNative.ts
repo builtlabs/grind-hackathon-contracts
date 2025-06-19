@@ -116,6 +116,48 @@ describe("HashCrashNative", function () {
             expect(await sut.getLootTable()).to.equal(lootTable.target);
         });
 
+        it("Should revert if the hash is zero", async function () {
+            const { weth, lootTable, config } = await loadFixture(fixture);
+
+            const SUT = await ethers.getContractFactory("HashCrashNative");
+
+            await expect(
+                SUT.deploy(
+                    lootTable.target,
+                    ethers.ZeroHash,
+                    config.hashProducer,
+                    maxExposureNumerator,
+                    lowLiquidityThreshold,
+                    config.owner,
+                    weth.target,
+                    minimumValue
+                )
+            )
+                .to.be.revertedWithCustomError(SUT, "InvalidBytes")
+                .withArgs(ethers.ZeroHash);
+        });
+
+        it("Should revert if the loot table address is zero", async function () {
+            const { weth, config } = await loadFixture(fixture);
+
+            const SUT = await ethers.getContractFactory("HashCrashNative");
+
+            await expect(
+                SUT.deploy(
+                    ethers.ZeroAddress,
+                    config.genesisHash,
+                    config.hashProducer,
+                    maxExposureNumerator,
+                    lowLiquidityThreshold,
+                    config.owner,
+                    weth.target,
+                    minimumValue
+                )
+            )
+                .to.be.revertedWithCustomError(SUT, "InvalidAddress")
+                .withArgs(ethers.ZeroAddress);
+        });
+
         it("Should emit setup events", async function () {
             const { weth, lootTable, config } = await loadFixture(fixture);
 

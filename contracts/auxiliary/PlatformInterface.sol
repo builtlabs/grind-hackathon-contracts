@@ -135,8 +135,8 @@ contract PlatformInterface is WrappedContext, Ownable {
 
     /// @notice Sets the referral reward numerator for a given index.
     /// @param _index The index of the referral reward.
-    /// @param _numerator The numerator for the referral reward, must be less than or equal to DENOMINATOR.
-    /// @dev It is the callers responsibility to ensure the sum of all numerators does not exceed DENOMINATOR.
+    /// @param _numerator The numerator for the referral reward.
+    /// @dev the total referral reward rate must not exceed 100%, gaps are not allowed when adding new rewards, only when removing them (effectively removing everything after).
     function setReferralReward(uint256 _index, uint256 _numerator) external onlyOwner {
         _setReferralReward(_index, _numerator);
     }
@@ -198,12 +198,17 @@ contract PlatformInterface is WrappedContext, Ownable {
     // #######################################################################################
 
     function _setPlatform(address platform_) private {
+        if (platform_ == address(0)) revert InvalidAddress(platform_);
         _platform = platform_;
         emit PlatformSet(_platform);
     }
 
     function _setReferralReward(uint256 _index, uint256 _numerator) private {
         _referralReward[_index] = _numerator;
+
+        _ensureNoGaps(_index);
+        _ensureAggregateRewardRate();
+
         emit ReferralRewardSet(_index, _numerator);
     }
 
@@ -279,5 +284,32 @@ contract PlatformInterface is WrappedContext, Ownable {
             current = _referredBy[current];
         }
         return false;
+    }
+
+    function _ensureNoGaps(uint256 _index) private view {
+        for (uint256 i = 0; i < _index; i++) {
+            if (_referralReward[i] == 0) {
+                revert InvalidValue(_index);
+            }
+        }
+    }
+
+    function _ensureAggregateRewardRate() private view {
+        uint256 totalRate = 0;
+        uint256 index = 0;
+        uint256 currentRate = _referralReward[index];
+
+        while (currentRate > 0) {
+            unchecked {
+                totalRate += currentRate;
+                index++;
+            }
+
+            if (totalRate > DENOMINATOR) {
+                revert InvalidValue(totalRate);
+            }
+
+            currentRate = _referralReward[index];
+        }
     }
 }

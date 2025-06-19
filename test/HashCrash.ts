@@ -461,6 +461,48 @@ describe("HashCrash", function () {
             expect(await sut.getLootTable()).to.equal(lootTable.target);
         });
 
+        it("Should revert if the hash is zero", async function () {
+            const { token, lootTable, config } = await loadFixture(baseFixture);
+
+            const SUT = await ethers.getContractFactory("HashCrashHarness");
+
+            await expect(
+                SUT.deploy(
+                    lootTable.target,
+                    ethers.ZeroHash,
+                    config.hashProducer,
+                    maxExposureNumerator,
+                    lowLiquidityThreshold,
+                    config.owner,
+                    token.target,
+                    minimumValue
+                )
+            )
+                .to.be.revertedWithCustomError(SUT, "InvalidBytes")
+                .withArgs(ethers.ZeroHash);
+        });
+
+        it("Should revert if the loot table address is zero", async function () {
+            const { token, config } = await loadFixture(baseFixture);
+
+            const SUT = await ethers.getContractFactory("HashCrashHarness");
+
+            await expect(
+                SUT.deploy(
+                    ethers.ZeroAddress,
+                    config.genesisHash,
+                    config.hashProducer,
+                    maxExposureNumerator,
+                    lowLiquidityThreshold,
+                    config.owner,
+                    token.target,
+                    minimumValue
+                )
+            )
+                .to.be.revertedWithCustomError(SUT, "InvalidAddress")
+                .withArgs(ethers.ZeroAddress);
+        });
+
         it("Should emit setup events", async function () {
             const { token, lootTable, config } = await loadFixture(baseFixture);
 
@@ -1054,6 +1096,14 @@ describe("HashCrash", function () {
             );
         });
 
+        it("Should revert if the address is the zero address", async function () {
+            const { sut } = await loadFixture(baseFixture);
+
+            await expect(sut.setHashProducer(ethers.ZeroAddress))
+                .to.be.revertedWithCustomError(sut, "InvalidAddress")
+                .withArgs(ethers.ZeroAddress);
+        });
+
         it("Should set the hash producer", async function () {
             const { sut, wallets } = await loadFixture(baseFixture);
 
@@ -1114,6 +1164,21 @@ describe("HashCrash", function () {
             );
         });
 
+        it("Should revert if the value is 0", async function () {
+            const { sut } = await loadFixture(baseFixture);
+
+            await expect(sut.setIntroBlocks(0n)).to.be.revertedWithCustomError(sut, "InvalidValue").withArgs(0n);
+        });
+
+        it("Should revert if the value is less than reduced intro blocks", async function () {
+            const { sut } = await loadFixture(baseFixture);
+
+            const reducedIntroBlocks = await sut.getReducedIntroBlocks();
+            await expect(sut.setIntroBlocks(reducedIntroBlocks - 1n))
+                .to.be.revertedWithCustomError(sut, "InvalidValue")
+                .withArgs(reducedIntroBlocks - 1n);
+        });
+
         it("Should set the intro blocks", async function () {
             const { sut } = await loadFixture(baseFixture);
 
@@ -1137,6 +1202,21 @@ describe("HashCrash", function () {
                 sut,
                 "OwnableUnauthorizedAccount"
             );
+        });
+
+        it("Should revert if the value is 0", async function () {
+            const { sut } = await loadFixture(baseFixture);
+
+            await expect(sut.setReducedIntroBlocks(0n)).to.be.revertedWithCustomError(sut, "InvalidValue").withArgs(0n);
+        });
+
+        it("Should revert if the value is greater than intro blocks", async function () {
+            const { sut } = await loadFixture(baseFixture);
+
+            const introBlocks = await sut.getIntroBlocks();
+            await expect(sut.setReducedIntroBlocks(introBlocks + 1n))
+                .to.be.revertedWithCustomError(sut, "InvalidValue")
+                .withArgs(introBlocks + 1n);
         });
 
         it("Should set the reduced intro blocks", async function () {
@@ -1639,6 +1719,15 @@ describe("HashCrash", function () {
             );
         });
 
+        it("Should revert if the next hash is bytes32(0)", async function () {
+            const { sut, config } = await loadFixture(baseFixture);
+
+            const nextHash = ethers.ZeroHash;
+            await expect(sut.reveal(config.genesisSalt, nextHash))
+                .to.be.revertedWithCustomError(sut, "InvalidBytes")
+                .withArgs(nextHash);
+        });
+
         it("Should revert if the hash does not match the salt", async function () {
             const { sut } = await loadFixture(baseFixture);
 
@@ -1648,6 +1737,30 @@ describe("HashCrash", function () {
 
         it("Should revert if this function was called too early", async function () {
             const { sut, lootTable, config } = await loadFixture(betFixture);
+
+            await expect(sut.reveal(config.genesisSalt, nextHash)).to.be.revertedWithCustomError(
+                lootTable,
+                "MissingBlockhash"
+            );
+        });
+
+        it("Should revert if this function was called too late", async function () {
+            const { sut, lootTable, config } = await loadFixture(betFixture);
+
+            await mine(1000);
+
+            await expect(sut.reveal(config.genesisSalt, nextHash)).to.be.revertedWithCustomError(
+                lootTable,
+                "MissingBlockhash"
+            );
+        });
+
+        it("Should revert if this function was called after an emergency refund", async function () {
+            const { sut, lootTable, config } = await loadFixture(betFixture);
+
+            await mine(1000);
+
+            await sut.emergencyRefund();
 
             await expect(sut.reveal(config.genesisSalt, nextHash)).to.be.revertedWithCustomError(
                 lootTable,
@@ -1986,7 +2099,7 @@ describe("HashCrash", function () {
         it("Should emit ActiveUpdated", async function () {
             const { sut } = await loadFixture(unrecoverableRoundFixture);
 
-            await expect(sut.emergencyRefund()).to.emit(sut, "ActiveUpdated").withArgs(true);
+            await expect(sut.emergencyRefund()).to.emit(sut, "ActiveUpdated").withArgs(false);
         });
 
         it("Should keep the same hash", async function () {
