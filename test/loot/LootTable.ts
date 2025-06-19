@@ -152,7 +152,12 @@ describe("LootTable", function () {
                 blockhashes.push(block.hash);
             }
 
-            const encoded = ethers.keccak256(ethers.AbiCoder.defaultAbiCoder().encode(["bytes32[]"], [blockhashes]));
+            const encoded = ethers.keccak256(
+                ethers.AbiCoder.defaultAbiCoder().encode(
+                    ["address", "bytes32", "bytes32[]"],
+                    [sut.target, salt, blockhashes]
+                )
+            );
             expect(deathData.proof).to.equal(encoded);
         });
 
@@ -185,60 +190,13 @@ describe("LootTable", function () {
                 blockhashes.push(block.hash);
             }
 
-            const encoded = ethers.keccak256(ethers.AbiCoder.defaultAbiCoder().encode(["bytes32[]"], [blockhashes]));
+            const encoded = ethers.keccak256(
+                ethers.AbiCoder.defaultAbiCoder().encode(
+                    ["address", "bytes32", "bytes32[]"],
+                    [sut.target, salt, blockhashes]
+                )
+            );
             expect(deathData.proof).to.equal(encoded);
-        });
-    });
-
-    describe("getRoundBlockHashes", function () {
-        const salt = ethers.hexlify(ethers.randomBytes(32));
-
-        it("Should revert if the block hash is not available", async function () {
-            const { sut } = await loadFixture(fixture);
-
-            const startBlock = await ethers.provider.getBlockNumber();
-            await expect(
-                sut.getRoundBlockHashes(ethers.hexlify(ethers.randomBytes(32)), 0n, startBlock)
-            ).to.be.revertedWithCustomError(sut, "MissingBlockhash");
-        });
-
-        it("Should revert if the block hashes dont match the proof", async function () {
-            const { sut } = await loadFixture(predictableDeathTable);
-
-            const length = await sut.getLength();
-
-            const startBlock = BigInt(await ethers.provider.getBlockNumber());
-            await mine(Number(length));
-
-            const deathData = await sut.getDeathProof(salt, startBlock);
-
-            await expect(sut.getRoundBlockHashes(ethers.hexlify(ethers.randomBytes(32)), deathData.deadIndex, startBlock))
-                .to.be.revertedWithCustomError(sut, "BlockHashesDontMatchProof");
-        });
-
-        it("Should get the expected block hashes", async function () {
-            const { sut } = await loadFixture(predictableDeathTable);
-
-            const length = await sut.getLength();
-
-            const startBlock = BigInt(await ethers.provider.getBlockNumber());
-            await mine(Number(length));
-
-            const deathData = await sut.getDeathProof(salt, startBlock);
-
-            const verificationData = await sut.getRoundBlockHashes(deathData.proof, deathData.deadIndex, startBlock);
-
-            const blockhashes = [];
-            for (let i = 0; i < 4; i++) {
-                const block = await ethers.provider.getBlock(Number(startBlock) + i);
-                if (block === null) throw new Error("Block not found");
-                blockhashes.push(block.hash);
-            }
-
-            expect(verificationData.length).to.equal(blockhashes.length);
-            for (let i = 0; i < blockhashes.length; i++) {
-                expect(verificationData[i]).to.equal(blockhashes[i]);
-            }
         });
     });
 });

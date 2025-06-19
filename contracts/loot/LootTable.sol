@@ -58,7 +58,7 @@ abstract contract LootTable is ILootTable {
         return _isDead(_rng, _index);
     }
 
-    /// @notice Returns the dead index for a given salt and a proof of the hashes used to get it.
+    /// @notice Returns the dead index for a given salt and a proof to check against later.
     /// @dev The dead index is between 0 and the loot table length (inclusive).
     /// @dev The final multiplier for the round is at deadIndex - 1. Unless it is 0, then the round has a 0x multiplier.
     function getDeathProof(
@@ -83,28 +83,12 @@ abstract contract LootTable is ILootTable {
                     usedHashes[j] = hashes[j];
                 }
 
-                return (i, keccak256(abi.encode(usedHashes)));
+                return (i, _getProofHash(_salt, usedHashes));
             }
         }
 
         // This happens when no dead index is found, meaning the round has ended with the maximum multiplier.
-        return (length, keccak256(abi.encode(hashes)));
-    }
-
-    /// @notice Returns the hashes used to determine the dead index for a given round.
-    /// @dev This function is used to verify the death proof.
-    function getRoundBlockHashes(
-        bytes32 _deathProof,
-        uint64 _deadIndex,
-        uint64 _startBlock
-    ) external view returns (bytes32[] memory blockhashes) {
-        blockhashes = new bytes32[](_deadIndex + 1);
-
-        for (uint256 i = 0; i < blockhashes.length; i++) {
-            blockhashes[i] = _getBlockHash(_startBlock + i);
-        }
-
-        if (keccak256(abi.encode(blockhashes)) != _deathProof) revert BlockHashesDontMatchProof();
+        return (length, _getProofHash(_salt, hashes));
     }
 
     // #######################################################################################
@@ -116,6 +100,10 @@ abstract contract LootTable is ILootTable {
     function _probability(uint256 _index) internal pure virtual returns (uint256);
 
     // #######################################################################################
+
+    function _getProofHash(bytes32 _salt, bytes32[] memory _hashes) private view returns (bytes32) {
+        return keccak256(abi.encode(address(this), _salt, _hashes));
+    }
 
     function _isDead(uint256 _rng, uint256 _index) private pure returns (bool) {
         return _rng % PROBABILITY_DENOMINATOR < _probability(_index);

@@ -21,16 +21,9 @@ interface ILootTable {
     /// @notice Returns whether the given random number results in death at the given index.
     function isDead(uint256 _rng, uint256 _index) external pure returns (bool);
 
-    /// @notice Returns the dead index for a given salt and the hashes used to determine it.
+    /// @notice Returns the dead index for a given salt and a proof to check against later.
     function getDeathProof(
         bytes32 _salt,
         uint256 _roundStartBlock
     ) external view returns (uint64 deadIndex, bytes32 proof);
-
-    /// @notice Returns the hashes used to determine the dead index for a given round.
-    function getRoundBlockHashes(
-        bytes32 _deathProof,
-        uint64 _deadIndex,
-        uint64 _startBlock
-    ) external view returns (bytes32[] memory blockhashes);
 }
