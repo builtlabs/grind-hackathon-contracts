@@ -10,6 +10,7 @@ abstract contract LootTable is ILootTable {
     uint256 private constant PROBABILITY_DENOMINATOR = 1e18;
 
     error MissingBlockhash();
+    error BlockHashesDontMatchProof();
 
     // #######################################################################################
 
@@ -57,10 +58,13 @@ abstract contract LootTable is ILootTable {
         return _isDead(_rng, _index);
     }
 
-    /// @notice Returns the dead index for a given salt and the hashes used to determine it.
+    /// @notice Returns the dead index for a given salt and a proof of the hashes used to get it.
     /// @dev The dead index is between 0 and the loot table length (inclusive).
     /// @dev The final multiplier for the round is at deadIndex - 1. Unless it is 0, then the round has a 0x multiplier.
-    function getDeathProof(bytes32 _salt, uint256 _roundStartBlock) external view returns (uint64, bytes32[] memory) {
+    function getDeathProof(
+        bytes32 _salt,
+        uint256 _roundStartBlock
+    ) external view returns (uint64 deadIndex, bytes32 proof) {
         uint64 length = uint64(_getLength());
         bytes32[] memory hashes = new bytes32[](length);
 
@@ -79,12 +83,28 @@ abstract contract LootTable is ILootTable {
                     usedHashes[j] = hashes[j];
                 }
 
-                return (i, usedHashes);
+                return (i, keccak256(abi.encode(usedHashes)));
             }
         }
 
         // This happens when no dead index is found, meaning the round has ended with the maximum multiplier.
-        return (length, hashes);
+        return (length, keccak256(abi.encode(hashes)));
+    }
+
+    /// @notice Returns the hashes used to determine the dead index for a given round.
+    /// @dev This function is used to verify the death proof.
+    function getRoundBlockHashes(
+        bytes32 _deathProof,
+        uint64 _deadIndex,
+        uint64 _startBlock
+    ) external view returns (bytes32[] memory blockhashes) {
+        blockhashes = new bytes32[](_deadIndex + 1);
+
+        for (uint256 i = 0; i < blockhashes.length; i++) {
+            blockhashes[i] = _getBlockHash(_startBlock + i);
+        }
+
+        if (keccak256(abi.encode(blockhashes)) != _deathProof) revert BlockHashesDontMatchProof();
     }
 
     // #######################################################################################

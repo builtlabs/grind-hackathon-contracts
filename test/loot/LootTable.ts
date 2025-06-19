@@ -132,7 +132,7 @@ describe("LootTable", function () {
             await mine(Number(length));
 
             const deathData = await sut.getDeathProof(salt, startBlock);
-            expect(deathData[0]).to.equal(3);
+            expect(deathData.deadIndex).to.equal(3);
         });
 
         it("Should get the expected number of hashes", async function () {
@@ -144,12 +144,16 @@ describe("LootTable", function () {
             await mine(Number(length));
 
             const deathData = await sut.getDeathProof(salt, startBlock);
-            expect(deathData[1].length).to.equal(4n);
-            for (let i = 0; i < deathData[1].length; i++) {
+
+            const blockhashes = [];
+            for (let i = 0; i < 4; i++) {
                 const block = await ethers.provider.getBlock(startBlock + i);
                 if (block === null) throw new Error("Block not found");
-                expect(deathData[1][i]).to.equal(block.hash);
+                blockhashes.push(block.hash);
             }
+
+            const encoded = ethers.keccak256(ethers.AbiCoder.defaultAbiCoder().encode(["bytes32[]"], [blockhashes]));
+            expect(deathData.proof).to.equal(encoded);
         });
 
         it("Should return length when none of the probabilities cause a death", async function () {
@@ -161,7 +165,7 @@ describe("LootTable", function () {
             await mine(Number(length));
 
             const deathData = await sut.getDeathProof(salt, startBlock);
-            expect(deathData[0]).to.equal(length);
+            expect(deathData.deadIndex).to.equal(length);
         });
 
         it("Should return all hashes when none of the probabilities cause a death", async function () {
@@ -173,11 +177,67 @@ describe("LootTable", function () {
             await mine(Number(length));
 
             const deathData = await sut.getDeathProof(salt, startBlock);
-            expect(deathData[1].length).to.equal(length);
-            for (let i = 0; i < deathData[1].length; i++) {
+
+            const blockhashes = [];
+            for (let i = 0; i < Number(length); i++) {
                 const block = await ethers.provider.getBlock(startBlock + i);
                 if (block === null) throw new Error("Block not found");
-                expect(deathData[1][i]).to.equal(block.hash);
+                blockhashes.push(block.hash);
+            }
+
+            const encoded = ethers.keccak256(ethers.AbiCoder.defaultAbiCoder().encode(["bytes32[]"], [blockhashes]));
+            expect(deathData.proof).to.equal(encoded);
+        });
+    });
+
+    describe("getRoundBlockHashes", function () {
+        const salt = ethers.hexlify(ethers.randomBytes(32));
+
+        it("Should revert if the block hash is not available", async function () {
+            const { sut } = await loadFixture(fixture);
+
+            const startBlock = await ethers.provider.getBlockNumber();
+            await expect(
+                sut.getRoundBlockHashes(ethers.hexlify(ethers.randomBytes(32)), 0n, startBlock)
+            ).to.be.revertedWithCustomError(sut, "MissingBlockhash");
+        });
+
+        it("Should revert if the block hashes dont match the proof", async function () {
+            const { sut } = await loadFixture(predictableDeathTable);
+
+            const length = await sut.getLength();
+
+            const startBlock = BigInt(await ethers.provider.getBlockNumber());
+            await mine(Number(length));
+
+            const deathData = await sut.getDeathProof(salt, startBlock);
+
+            await expect(sut.getRoundBlockHashes(ethers.hexlify(ethers.randomBytes(32)), deathData.deadIndex, startBlock))
+                .to.be.revertedWithCustomError(sut, "BlockHashesDontMatchProof");
+        });
+
+        it("Should get the expected block hashes", async function () {
+            const { sut } = await loadFixture(predictableDeathTable);
+
+            const length = await sut.getLength();
+
+            const startBlock = BigInt(await ethers.provider.getBlockNumber());
+            await mine(Number(length));
+
+            const deathData = await sut.getDeathProof(salt, startBlock);
+
+            const verificationData = await sut.getRoundBlockHashes(deathData.proof, deathData.deadIndex, startBlock);
+
+            const blockhashes = [];
+            for (let i = 0; i < 4; i++) {
+                const block = await ethers.provider.getBlock(Number(startBlock) + i);
+                if (block === null) throw new Error("Block not found");
+                blockhashes.push(block.hash);
+            }
+
+            expect(verificationData.length).to.equal(blockhashes.length);
+            for (let i = 0; i < blockhashes.length; i++) {
+                expect(verificationData[i]).to.equal(blockhashes[i]);
             }
         });
     });

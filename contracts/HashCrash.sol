@@ -28,7 +28,7 @@ abstract contract HashCrash is Liquidity {
     // #######################################################################################
 
     event RoundStarted(bytes32 indexed roundHash, uint64 startBlock, uint64 hashIndex, uint256 liquidity);
-    event RoundEnded(bytes32 indexed roundHash, bytes32 roundSalt, uint64 deadIndex, bytes32[] hashes);
+    event RoundEnded(bytes32 indexed roundHash, bytes32 roundSalt, uint64 deadIndex, bytes32 proof);
 
     event RoundRefunded(bytes32 indexed roundHash);
     event RoundAccelerated(bytes32 indexed roundHash, uint64 startBlock);
@@ -433,12 +433,12 @@ abstract contract HashCrash is Liquidity {
         if (_nextHash == bytes32(0)) revert InvalidBytes(_nextHash);
         if (keccak256(abi.encodePacked(_salt)) != _roundHash) revert InvalidBytes(_salt);
 
-        (uint64 deadIndex, bytes32[] memory hashes) = _lootTable.getDeathProof(_salt, _roundStartBlock);
+        (uint64 deadIndex, bytes32 proof) = _lootTable.getDeathProof(_salt, _roundStartBlock);
 
         _processBets(deadIndex);
         _clearLiquidityQueue();
 
-        emit RoundEnded(_roundHash, _salt, deadIndex, hashes);
+        emit RoundEnded(_roundHash, _salt, deadIndex, proof);
 
         _roundStartBlock = 0;
         _roundHash = _nextHash;
